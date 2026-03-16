@@ -119,9 +119,9 @@ const CLOUD_FRAGMENT = /* glsl */ `
     vec3 windOffset = vec3(time * cloudSpeed * 120.0, 0.0, time * cloudSpeed * 60.0);
     float rawDensity = fbm((pos + windOffset) * cloudScale * 0.001);
 
-    // Noise-based density with coverage threshold
-    float coverageThreshold = 1.0 - coverage;
-    float density = smoothstep(coverageThreshold, coverageThreshold + 0.15, rawDensity);
+    // Subtractive thresholding for sharp cloud structure (like reference shader)
+    float cloudThreshold = coverage;
+    float density = max(cloudThreshold - rawDensity, 0.0) * 1.8;
 
     return density * heightProfile * cloudDensity;
   }
@@ -137,8 +137,9 @@ const CLOUD_FRAGMENT = /* glsl */ `
     vec3 windOffset = vec3(time * cloudSpeed * 120.0, 0.0, time * cloudSpeed * 60.0);
     float rawDensity = fbmLight((pos + windOffset) * cloudScale * 0.001);
 
-    float coverageThreshold = 1.0 - coverage;
-    float density = smoothstep(coverageThreshold, coverageThreshold + 0.15, rawDensity);
+    // Subtractive thresholding for sharp cloud structure
+    float cloudThreshold = coverage;
+    float density = max(cloudThreshold - rawDensity, 0.0) * 1.8;
 
     return density * heightProfile * cloudDensity;
   }
@@ -189,13 +190,15 @@ const CLOUD_FRAGMENT = /* glsl */ `
         // Simple sun illumination with power falloff
         float sunIllum = pow(max(0.0, dot(normalize(sunDirection), normalize(pos - ro))), 10.0);
 
-        // Combine sun + ambient lighting (original, unchanged for night)
-        vec3 ambient = cloudShadowColor * 0.15;
-        vec3 sunLit = sunColor * sunIllum * 0.8;
-
         // Use sun elevation to determine day vs night (not brightness, which is always bright)
         // sunDirection.y is positive when sun is above horizon (day), negative when below (night)
         float dayThreshold = smoothstep(-0.2, 0.15, sunDirection.y);
+
+        // Combine sun + ambient lighting (whiter ambient during day for white clouds)
+        vec3 ambientColor = mix(cloudShadowColor, vec3(1.0), dayThreshold * 0.6);
+        vec3 ambient = ambientColor * 0.3;
+        vec3 sunLit = sunColor * sunIllum * 0.8;
+
         vec3 cloudColorAdjusted = mix(cloudColor, vec3(1.0), dayThreshold * 0.8);
         vec3 luminance = (sunLit + ambient) * cloudColorAdjusted;
 
@@ -219,7 +222,7 @@ const CLOUD_FRAGMENT = /* glsl */ `
     float vignetteFade = mix(1.0, vignette, skyDarkening);
     scatteredLight *= vignetteFade;
 
-    float alpha = (1.0 - transmittance) * 0.85;
+    float alpha = (1.0 - transmittance) * 1.0;
 
     // Very subtle horizon fade to blend with ocean
     float horizonFade = smoothstep(-0.5, 1.0, rd.y);
@@ -237,41 +240,28 @@ export default function CloudSky() {
   const materialRef = useRef();
   const { camera } = useThree();
 
-  // Share light controls with other scene components
-  const { lightX, lightY, lightZ, sunColorHex } = useControls({
-    'Light Position': folder({
-      lightX: { value: SOLAR.lightX },
-      lightY: { value: SOLAR.lightY },
-      lightZ: { value: SOLAR.lightZ },
-      sunColorHex: { value: SOLAR.sunColorHex },
+  // Share light and time controls with other scene components
+  const { lightX, lightY, lightZ, sunColorHex, cloudColorHex, shadowColorHex, timeOfDay } = useControls({
+    'Time of Day': folder({
+      timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, render: () => false },
+      lightX: { value: SOLAR.lightX, render: () => false },
+      lightY: { value: SOLAR.lightY, render: () => false },
+      lightZ: { value: SOLAR.lightZ, render: () => false },
+      sunColorHex: { value: SOLAR.sunColorHex, render: () => false },
+      cloudColorHex: { value: SOLAR.cloudColorHex, render: () => false },
+      shadowColorHex: { value: SOLAR.shadowColorHex, render: () => false },
     }),
   });
 
-  const {
-    coverage,
-    fluffiness,
-    cloudScale,
-    cloudSpeed,
-    density,
-    base,
-    top,
-    lightAbsorption,
-    cloudColorHex,
-    shadowColorHex,
-  } = useControls({
-    Clouds: folder({
-      coverage:       { value: 0.44, min: 0, max: 1, step: 0.01, label: 'Coverage' },
-      fluffiness:     { value: 0.47,  min: 0, max: 1, step: 0.01, label: 'Fluffiness' },
-      cloudScale:     { value: 0.6,  min: 0.1, max: 5, step: 0.1, label: 'Scale' },
-      cloudSpeed:     { value: 0.3,  min: 0, max: 2, step: 0.05, label: 'Wind Speed' },
-      density:        { value: 0.65, min: 0.1, max: 3, step: 0.1, label: 'Density' },
-      base:           { value: -100,  min: -100, max: 2000, step: 50, label: 'Base Altitude' },
-      top:            { value: 2500, min: 500, max: 5000, step: 50, label: 'Top Altitude' },
-      lightAbsorption:{ value: 1.0,  min: 0.1, max: 3, step: 0.1, label: 'Light Absorption' },
-      cloudColorHex:  { value: SOLAR.cloudColorHex, label: 'Cloud Color' },
-      shadowColorHex: { value: SOLAR.shadowColorHex, label: 'Shadow Color' },
-    }),
-  });
+  // Cloud parameters (locked - do not modify)
+  const coverage = 0.32;
+  const fluffiness = 0.27;
+  const cloudScale = 0.8;
+  const cloudSpeed = 0.3;
+  const density = 3.0;
+  const base = -200;
+  const top = 4950;
+  const lightAbsorption = 0.5;
 
   const sunDirection = useMemo(() => {
     return new THREE.Vector3(lightX, lightY, lightZ).normalize();
@@ -288,10 +278,10 @@ export default function CloudSky() {
     fluffiness:       { value: 0.6 },
     cloudScale:       { value: 1.0 },
     cloudSpeed:       { value: 0.3 },
-    cloudDensity:     { value: 1.0 },
-    cloudBase:        { value: 200.0 },
+    cloudDensity:     { value: 2.0 },
+    cloudBase:        { value: -200.0 },
     cloudTop:         { value: 2500.0 },
-    lightAbsorption:  { value: 1.0 },
+    lightAbsorption:  { value: 0.4 },
     skyDarkening:     { value: 0.87 },
   }), []);
 
@@ -305,7 +295,9 @@ export default function CloudSky() {
     const mat = materialRef.current;
     if (!mat) return;
 
-    mat.uniforms.time.value = state.clock.elapsedTime;
+    // Cloud movement: scale timeOfDay changes heavily, add elapsed time for continuous motion
+    mat.uniforms.time.value = timeOfDay * 100 + state.clock.elapsedTime;
+
     mat.uniforms.cameraPos.value.copy(camera.position);
     meshRef.current.position.copy(camera.position);
 
