@@ -49,10 +49,15 @@ export default function Sun() {
     return new THREE.Color(colorHex);
   }, [timeOfDay]);
 
-  // Memoize uniforms so React detects changes
+  // Create uniforms once, mutate in-place when sunColor changes
   const uniforms = useMemo(() => ({
-    sunColor: { value: sunColor },
-  }), [sunColor]);
+    sunColor: { value: new THREE.Color() },
+  }), []);
+
+  // Update uniform value when sunColor changes
+  useEffect(() => {
+    uniforms.sunColor.value.copy(sunColor);
+  }, [sunColor, uniforms]);
 
   // Sun position based on time of day
   const sunPosition = useMemo(() => {
@@ -67,13 +72,6 @@ export default function Sun() {
 
   const isSunAboveOcean = sunPosition.y > 5;
   const isSunVisible = timeOfDay >= 6 && timeOfDay <= 18;
-
-  // Force material update when uniforms change
-  useEffect(() => {
-    if (meshRef.current?.material) {
-      meshRef.current.material.needsUpdate = true;
-    }
-  }, [uniforms]);
 
   if (!isSunVisible || !isSunAboveOcean) return null;
 

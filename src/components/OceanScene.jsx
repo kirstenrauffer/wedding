@@ -227,7 +227,7 @@ function OceanWater() {
 
   // Read sky colors so env map updates when sky changes (hidden from UI)
   const { skyTopHex, skyMidHex, skyHorizonHex } = useControls({
-    Sky: folder({
+    'Time of Day': folder({
       skyTopHex: { value: '#1E5B8E', render: () => false },
       skyMidHex: { value: '#4A90C4', render: () => false },
       skyHorizonHex: { value: '#87BBDA', render: () => false },
