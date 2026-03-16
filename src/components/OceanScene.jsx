@@ -397,16 +397,16 @@ function PostProcessing() {
         />
       )}
       <SMAA />
-      {outlineEnabled && (
-        <OutlineComponent
-          threshold={outlineThreshold}
-          strength={outlineStrength}
-        />
-      )}
       {kuwaharaEnabled && (
         <KuwaharaComponent
           radius={kuwaharaRadius}
           sharpness={kuwaharaSharpness}
+        />
+      )}
+      {outlineEnabled && (
+        <OutlineComponent
+          threshold={outlineThreshold}
+          strength={outlineStrength}
         />
       )}
       {vignetteEnabled && (

@@ -3,6 +3,7 @@ import { Uniform } from 'three';
 
 const fragmentShader = /* glsl */ `
   uniform float radius;
+  uniform float sharpness;
 
   void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
     float size = radius;
@@ -29,7 +30,7 @@ const fragmentShader = /* glsl */ `
       vec3 avg = colorSum / count;
       vec3 var = colorSum2 / count - avg * avg;
       quadrants[0] = avg;
-      variances[0] = dot(var, vec3(0.299, 0.587, 0.114));
+      variances[0] = dot(var, vec3(0.299, 0.587, 0.114)) * sharpness;
     }
 
     // Top-right
@@ -50,7 +51,7 @@ const fragmentShader = /* glsl */ `
       vec3 avg = colorSum / count;
       vec3 var = colorSum2 / count - avg * avg;
       quadrants[1] = avg;
-      variances[1] = dot(var, vec3(0.299, 0.587, 0.114));
+      variances[1] = dot(var, vec3(0.299, 0.587, 0.114)) * sharpness;
     }
 
     // Bottom-left
@@ -71,7 +72,7 @@ const fragmentShader = /* glsl */ `
       vec3 avg = colorSum / count;
       vec3 var = colorSum2 / count - avg * avg;
       quadrants[2] = avg;
-      variances[2] = dot(var, vec3(0.299, 0.587, 0.114));
+      variances[2] = dot(var, vec3(0.299, 0.587, 0.114)) * sharpness;
     }
 
     // Bottom-right
@@ -92,7 +93,7 @@ const fragmentShader = /* glsl */ `
       vec3 avg = colorSum / count;
       vec3 var = colorSum2 / count - avg * avg;
       quadrants[3] = avg;
-      variances[3] = dot(var, vec3(0.299, 0.587, 0.114));
+      variances[3] = dot(var, vec3(0.299, 0.587, 0.114)) * sharpness;
     }
 
     // Find quadrant with minimum variance
