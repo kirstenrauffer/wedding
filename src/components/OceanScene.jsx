@@ -213,8 +213,8 @@ function OceanWater() {
 
     // Add ink outline uniforms
     w.material.uniforms.inkWidth = { value: 1.0 };
-    w.material.uniforms.inkStrength = { value: 0.9 };
-    w.material.uniforms.inkColor = { value: new THREE.Color('#07090B') };
+    w.material.uniforms.inkStrength = { value: 1.2 };
+    w.material.uniforms.inkColor = { value: new THREE.Color('#03050A') };
 
     // Add lighting uniforms
     w.material.uniforms.fresnelStrength = { value: 1.0 };
@@ -351,8 +351,8 @@ function PostProcessing() {
     }),
     Outline: folder({
       outlineEnabled: { value: true, label: 'Enabled' },
-      outlineThreshold: { value: 0.1, min: 0.01, max: 0.3, step: 0.01, label: 'Threshold' },
-      outlineStrength: { value: 1.5, min: 0, max: 3, step: 0.1, label: 'Strength' },
+      outlineThreshold: { value: 0.05, min: 0.01, max: 0.3, step: 0.01, label: 'Threshold' },
+      outlineStrength: { value: 2.0, min: 0, max: 3, step: 0.1, label: 'Strength' },
     }),
   });
 
