@@ -212,9 +212,9 @@ function OceanWater() {
     w.material.uniforms.directionalIntensity = { value: directionalIntensity };
 
     // Add ink outline uniforms
-    w.material.uniforms.inkWidth = { value: 1.0 };
-    w.material.uniforms.inkStrength = { value: 1.2 };
-    w.material.uniforms.inkColor = { value: new THREE.Color('#03050A') };
+    w.material.uniforms.inkWidth = { value: 0.6 };
+    w.material.uniforms.inkStrength = { value: 1.8 };
+    w.material.uniforms.inkColor = { value: new THREE.Color('#000000') };
 
     // Add lighting uniforms
     w.material.uniforms.fresnelStrength = { value: 1.0 };
@@ -346,8 +346,8 @@ function PostProcessing() {
   } = useControls({
     Kuwahara: folder({
       kuwaharaEnabled: { value: true, label: 'Enabled' },
-      kuwaharaRadius: { value: 7.0, min: 1, max: 8, step: 0.5, label: 'Radius' },
-      kuwaharaSharpness: { value: 4.0, min: 1, max: 8, step: 0.5, label: 'Sharpness' },
+      kuwaharaRadius: { value: 4.0, min: 1, max: 8, step: 0.5, label: 'Radius' },
+      kuwaharaSharpness: { value: 6.0, min: 1, max: 8, step: 0.5, label: 'Sharpness' },
     }),
     Outline: folder({
       outlineEnabled: { value: true, label: 'Enabled' },
