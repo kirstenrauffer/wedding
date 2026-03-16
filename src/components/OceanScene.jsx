@@ -351,8 +351,8 @@ function PostProcessing() {
     }),
     Outline: folder({
       outlineEnabled: { value: true, label: 'Enabled' },
-      outlineThreshold: { value: 0.05, min: 0.01, max: 0.3, step: 0.01, label: 'Threshold' },
-      outlineStrength: { value: 2.0, min: 0, max: 3, step: 0.1, label: 'Strength' },
+      outlineThreshold: { value: 0.01, min: 0.0, max: 0.3, step: 0.01, label: 'Threshold' },
+      outlineStrength: { value: 3.0, min: 0, max: 3, step: 0.1, label: 'Strength' },
     }),
   });
 
@@ -397,16 +397,16 @@ function PostProcessing() {
         />
       )}
       <SMAA />
-      {kuwaharaEnabled && (
-        <KuwaharaComponent
-          radius={kuwaharaRadius}
-          sharpness={kuwaharaSharpness}
-        />
-      )}
       {outlineEnabled && (
         <OutlineComponent
           threshold={outlineThreshold}
           strength={outlineStrength}
+        />
+      )}
+      {kuwaharaEnabled && (
+        <KuwaharaComponent
+          radius={kuwaharaRadius}
+          sharpness={kuwaharaSharpness}
         />
       )}
       {vignetteEnabled && (

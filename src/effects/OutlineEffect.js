@@ -45,7 +45,7 @@ const fragmentShader = /* glsl */ `
 `;
 
 export class OutlineEffect extends Effect {
-  constructor({ threshold = 0.1, strength = 1.5, outlineColor = [0.05, 0.04, 0.06] } = {}) {
+  constructor({ threshold = 0.1, strength = 1.5, outlineColor = [1.0, 0.2, 0.2] } = {}) {
     super('OutlineEffect', fragmentShader, {
       uniforms: new Map([
         ['threshold', new Uniform(threshold)],
