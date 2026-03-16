@@ -58,12 +58,18 @@ export function computeSolarParams(hours) {
   const hex = (n) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0');
 
   // ── Sun / light color ──
-  // Dawn: pinkish warmth. Dusk: deeper orange-red. Midday: warm cream.
-  const warmFactor = Math.max(dawnGolden, duskGolden);
-  const cr = Math.round(lerp(255, 255, warmFactor));
-  const cg = Math.round(lerp(240, lerp(160, 140, duskGolden), warmFactor));
-  const cb = Math.round(lerp(220, lerp(100, 70, duskGolden), warmFactor));
-  const sunColorHex = `#${hex(cr)}${hex(cg)}${hex(cb)}`;
+  // Midday: warm tan. Dawn: pinkish warmth. Dusk: deeper orange-red.
+  const middaySunHex = '#b79e7d';
+  const dawnSunHex = '#FFD4B0';
+  const duskSunHex = '#FF8C42';
+
+  let sunColorHex = middaySunHex;
+
+  if (dawnGolden > 0) {
+    sunColorHex = lerpHex(middaySunHex, dawnSunHex, dawnGolden);
+  } else if (duskGolden > 0) {
+    sunColorHex = lerpHex(middaySunHex, duskSunHex, duskGolden);
+  }
 
   // ── Sky gradient colors (Ghibli palette) ──
   // Night:   deep navy → dark blue → dark horizon
@@ -73,9 +79,9 @@ export function computeSolarParams(hours) {
   const nightMid = '#152238';
   const nightHorizon = '#1A2A40';
 
-  const dayTop = '#2E6FA8';
-  const dayMid = '#5CA8E0';
-  const dayHorizon = '#A0D0F0';
+  const dayTop = '#1E5B8E';
+  const dayMid = '#4A90C4';
+  const dayHorizon = '#82bbe2';
 
   // Sunrise palette — soft pinks, lavender, warm peach (Kiki's dawn over the ocean)
   const sunriseTop = '#4A3A6E';     // dusky lavender-blue
@@ -113,8 +119,8 @@ export function computeSolarParams(hours) {
     Math.round(lerp(0.03, lerp(0.35, 0.8, elevation), dayFactor) * 10) / 10;
 
   // ── Cloud colors ──
-  // Day: warm off-white (not pure white). Night: dark gray-blue. Golden: warm cream.
-  const dayCloud = '#E8E0D0';
+  // Day: bright white. Night: dark gray-blue. Golden: warm cream.
+  const dayCloud = '#FFFFFF';
   const nightCloud = '#263040';
   const sunriseCloud = '#E8C0B0';   // warm pink-cream clouds at dawn
   const sunsetCloud = '#E8A890';    // coral-tinged clouds at dusk

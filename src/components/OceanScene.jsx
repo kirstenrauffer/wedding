@@ -8,6 +8,7 @@ import {
   Vignette,
   SMAA,
   N8AO,
+  wrapEffect,
 } from '@react-three/postprocessing';
 import { ToneMappingMode } from 'postprocessing';
 import * as THREE from 'three';
@@ -15,7 +16,9 @@ import { Water } from 'three/examples/jsm/objects/Water.js';
 import { useControls, folder } from 'leva';
 import CloudSky from './CloudSky';
 import StarField from './StarField';
+import Moon from './Moon';
 import { SOLAR, computeSolarParams } from '../utils/solar';
+import { KuwaharaEffect } from '../effects/KuwaharaEffect';
 
 // ─── Custom Water Shader (extended from Three.js Water) ───
 // Adds: Fresnel attenuation, depth-based absorption, subsurface scattering,
@@ -46,6 +49,8 @@ const CUSTOM_FRAGMENT_SHADER = /* glsl */ `
   uniform float refractionStrength;
   uniform samplerCube envMap;
   uniform float envMapIntensity;
+  uniform float ambientIntensity;
+  uniform float directionalIntensity;
 
   varying vec4 mirrorCoord;
   varying vec4 worldPosition;
@@ -66,8 +71,8 @@ const CUSTOM_FRAGMENT_SHADER = /* glsl */ `
   void sunLight(const vec3 surfaceNormal, const vec3 eyeDirection, float shiny, float spec, float diffuse, inout vec3 diffuseColor, inout vec3 specularColor) {
     vec3 reflection = normalize(reflect(-sunDirection, surfaceNormal));
     float direction = max(0.0, dot(eyeDirection, reflection));
-    specularColor += pow(direction, shiny) * sunColor * spec * specularStrength;
-    diffuseColor += max(dot(sunDirection, surfaceNormal), 0.0) * sunColor * diffuse;
+    specularColor += pow(direction, shiny) * sunColor * spec * specularStrength * directionalIntensity;
+    diffuseColor += max(dot(sunDirection, surfaceNormal), 0.0) * sunColor * diffuse * directionalIntensity;
   }
 
   #include <common>
@@ -135,10 +140,13 @@ const CUSTOM_FRAGMENT_SHADER = /* glsl */ `
     float skyTintAmt = envMapIntensity * 0.15;
     absorbedColor = mix(absorbedColor, absorbedColor * (vec3(0.5) + envSkyAmbient * 0.5), skyTintAmt);
 
+    // Apply ambient light fill
+    absorbedColor += envSkyAmbient * ambientIntensity * 0.2;
+
     // Subsurface scattering — mostly sun colored, slight sky tint
     float sss = pow(max(0.0, dot(eyeDirection, -sunDirection)), 4.0) * scatterStrength;
     vec3 sssLight = mix(sunColor, sunColor * (vec3(0.7) + envSkyAmbient * 0.3), envMapIntensity * 0.2);
-    vec3 subsurface = sss * scatterColor * sssLight;
+    vec3 subsurface = sss * scatterColor * sssLight * directionalIntensity;
 
     // Foam at wave peaks
     float foamFactor = smoothstep(0.5, 1.0, noise.y * 0.5 + 0.5) * foamStrength;
@@ -183,70 +191,45 @@ function OceanWater() {
     lightX,
     lightY,
     lightZ,
-    waterColorHex,
-    deepWaterColorHex,
     sunColorHex,
-    distortionScale,
-    waveSize,
-    waveSpeed,
-    choppiness,
-    fresnelStrength,
-    absorptionCoeff,
-    foamStrength,
-    scatterStrength,
-    scatterColorHex,
-    specularShininess,
-    specularStrength,
-    refractionStrength,
-    reflectionResolution,
-    alpha,
-    envMapIntensity,
+    ambientIntensity,
+    directionalIntensity,
   } = useControls({
-    'Light Position': folder({
-      lightX: { value: SOLAR.lightX, min: -500, max: 500, step: 1, label: 'X' },
-      lightY: { value: SOLAR.lightY, min: -100, max: 500, step: 1, label: 'Y' },
-      lightZ: { value: SOLAR.lightZ, min: -500, max: 500, step: 1, label: 'Z' },
-      sunColorHex: { value: SOLAR.sunColorHex, label: 'Color' },
-    }),
-    Water: folder({
-      waterColorHex: { value: '#1A4A6A', label: 'Shallow Color' },
-      deepWaterColorHex: { value: '#0A2540', label: 'Deep Color' },
-      alpha: { value: 1.0, min: 0, max: 1, step: 0.01, label: 'Alpha' },
-    }),
-    Waves: folder({
-      distortionScale: { value: 3.7, min: 0, max: 20, step: 0.1, label: 'Distortion' },
-      waveSize: { value: 1.0, min: 0.1, max: 10, step: 0.1, label: 'Size' },
-      waveSpeed: { value: 0.3, min: 0, max: 5, step: 0.1, label: 'Speed' },
-      choppiness: { value: 1.0, min: 0.1, max: 3.0, step: 0.05, label: 'Choppiness' },
-    }),
-    Reflections: folder({
-      fresnelStrength: { value: 1.0, min: 0, max: 5, step: 0.1, label: 'Fresnel' },
-      reflectionResolution: { value: 1024, min: 256, max: 2048, step: 256, label: 'Resolution' },
-      specularShininess: { value: 100, min: 10, max: 500, step: 10, label: 'Shininess' },
-      specularStrength: { value: 1.0, min: 0, max: 3, step: 0.1, label: 'Specular' },
-    }),
-    Refraction: folder({
-      refractionStrength: { value: 1.0, min: 0, max: 3, step: 0.1, label: 'Strength' },
-      absorptionCoeff: { value: 0.8, min: 0, max: 5, step: 0.1, label: 'Absorption' },
-    }),
-    Foam: folder({
-      foamStrength: { value: 0.15, min: 0, max: 1, step: 0.01, label: 'Strength' },
-    }),
-    Scattering: folder({
-      scatterStrength: { value: 0.05, min: 0, max: 2, step: 0.05, label: 'Strength' },
-      scatterColorHex: { value: '#228ba3', label: 'Color' },
-    }),
-    'Environment': folder({
-      envMapIntensity: { value: 1.0, min: 0, max: 2, step: 0.05, label: 'Sky Influence' },
+    'Time of Day': folder({
+      lightX: { value: SOLAR.lightX, render: () => false },
+      lightY: { value: SOLAR.lightY, render: () => false },
+      lightZ: { value: SOLAR.lightZ, render: () => false },
+      sunColorHex: { value: SOLAR.sunColorHex, render: () => false },
+      ambientIntensity: { value: SOLAR.ambientIntensity, render: () => false },
+      directionalIntensity: { value: SOLAR.directionalIntensity, render: () => false },
     }),
   });
 
-  // Read sky colors so env map updates when sky changes
+  // Water parameters (hardcoded)
+  const waterColorHex = '#1A4A6A';
+  const deepWaterColorHex = '#0A2540';
+  const alpha = 1.0;
+  const distortionScale = 4.1;
+  const waveSize = 1.6;
+  const waveSpeed = 0.3;
+  const choppiness = 1.0;
+  const fresnelStrength = 1.0;
+  const absorptionCoeff = 0.8;
+  const foamStrength = 0.15;
+  const scatterStrength = 0.05;
+  const scatterColorHex = '#228ba3';
+  const specularShininess = 100;
+  const specularStrength = 1.0;
+  const refractionStrength = 1.0;
+  const reflectionResolution = 1024;
+  const envMapIntensity = 1.0;
+
+  // Read sky colors so env map updates when sky changes (hidden from UI)
   const { skyTopHex, skyMidHex, skyHorizonHex } = useControls({
     Sky: folder({
-      skyTopHex: { value: '#1E5B8E' },
-      skyMidHex: { value: '#4A90C4' },
-      skyHorizonHex: { value: '#87BBDA' },
+      skyTopHex: { value: '#1E5B8E', render: () => false },
+      skyMidHex: { value: '#4A90C4', render: () => false },
+      skyHorizonHex: { value: '#87BBDA', render: () => false },
     }),
   });
 
@@ -295,6 +278,8 @@ function OceanWater() {
     w.material.uniforms.refractionStrength = { value: refractionStrength };
     w.material.uniforms.envMap = { value: cubeRenderTarget.texture };
     w.material.uniforms.envMapIntensity = { value: envMapIntensity };
+    w.material.uniforms.ambientIntensity = { value: ambientIntensity };
+    w.material.uniforms.directionalIntensity = { value: directionalIntensity };
 
     w.material.needsUpdate = true;
     w.rotation.x = -Math.PI / 2;
@@ -324,13 +309,11 @@ function OceanWater() {
     u.specularStrength.value = specularStrength;
     u.refractionStrength.value = refractionStrength;
     u.envMapIntensity.value = envMapIntensity;
+    u.ambientIntensity.value = ambientIntensity;
+    u.directionalIntensity.value = directionalIntensity;
     needsEnvUpdate.current = true;
-  }, [
-    water, sunDirection, sunColorHex, waterColorHex, distortionScale, alpha,
-    waveSize, choppiness, fresnelStrength, absorptionCoeff, deepWaterColorHex,
-    foamStrength, scatterStrength, scatterColorHex,
-    specularShininess, specularStrength, refractionStrength, envMapIntensity,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [water, sunDirection, sunColorHex, ambientIntensity, directionalIntensity]);
 
   useFrame(({ gl: renderer, scene: sc }, delta) => {
     // Update env map when sky/light params changed
@@ -386,10 +369,10 @@ const SKY_FRAGMENT = /* glsl */ `
 
 function GradientSky() {
   const { skyTopHex, skyMidHex, skyHorizonHex } = useControls({
-    Sky: folder({
-      skyTopHex: { value: '#1E5B8E', label: 'Top' },
-      skyMidHex: { value: '#4A90C4', label: 'Mid' },
-      skyHorizonHex: { value: '#87BBDA', label: 'Horizon' },
+    'Time of Day': folder({
+      skyTopHex: { value: '#1E5B8E', render: () => false },
+      skyMidHex: { value: '#4A90C4', render: () => false },
+      skyHorizonHex: { value: '#87BBDA', render: () => false },
     }),
   });
 
@@ -419,91 +402,37 @@ function GradientSky() {
   );
 }
 
-// ─── Lighting ───
-
-function SceneLighting() {
-  const { lightX, lightY, lightZ, sunColorHex } = useControls({
-    'Light Position': folder({
-      lightX: { value: SOLAR.lightX },
-      lightY: { value: SOLAR.lightY },
-      lightZ: { value: SOLAR.lightZ },
-      sunColorHex: { value: SOLAR.sunColorHex },
-    }),
-  });
-
-  const {
-    ambientIntensity,
-    directionalIntensity,
-    shadowsEnabled,
-  } = useControls({
-    Lighting: folder({
-      ambientIntensity: { value: SOLAR.ambientIntensity, min: 0, max: 2, step: 0.05, label: 'Ambient' },
-      directionalIntensity: { value: SOLAR.directionalIntensity, min: 0, max: 5, step: 0.1, label: 'Directional' },
-      shadowsEnabled: { value: true, label: 'Soft Shadows' },
-    }),
-  });
-
-  return (
-    <>
-      <ambientLight intensity={ambientIntensity} />
-      <directionalLight
-        position={[lightX, lightY, lightZ]}
-        color={sunColorHex}
-        intensity={directionalIntensity}
-        castShadow={shadowsEnabled}
-        shadow-mapSize={[2048, 2048]}
-        shadow-bias={-0.0001}
-        shadow-camera-far={500}
-        shadow-camera-left={-50}
-        shadow-camera-right={50}
-        shadow-camera-top={50}
-        shadow-camera-bottom={-50}
-        shadow-radius={4}
-      />
-    </>
-  );
-}
-
 // ─── Post Processing ───
+
+const KuwaharaComponent = wrapEffect(KuwaharaEffect);
+
 
 function PostProcessing() {
   const {
-    bloomEnabled,
-    bloomIntensity,
-    bloomThreshold,
-    bloomSmoothing,
-    dofEnabled,
-    dofFocusDistance,
-    dofFocalLength,
-    dofBokehScale,
-    aoEnabled,
-    aoIntensity,
-    vignetteEnabled,
-    vignetteIntensity,
+    kuwaharaEnabled,
+    kuwaharaRadius,
+    kuwaharaSharpness,
   } = useControls({
-    'Post Processing': folder({
-      Bloom: folder({
-        bloomEnabled: { value: true, label: 'Enabled' },
-        bloomIntensity: { value: 0.3, min: 0, max: 3, step: 0.05, label: 'Intensity' },
-        bloomThreshold: { value: 0.95, min: 0, max: 1, step: 0.01, label: 'Threshold' },
-        bloomSmoothing: { value: 0.3, min: 0, max: 1, step: 0.01, label: 'Smoothing' },
-      }),
-      'Depth of Field': folder({
-        dofEnabled: { value: true, label: 'Enabled' },
-        dofFocusDistance: { value: 0.01, min: 0, max: 1, step: 0.001, label: 'Focus Distance' },
-        dofFocalLength: { value: 0.02, min: 0, max: 0.1, step: 0.001, label: 'Focal Length' },
-        dofBokehScale: { value: 2.0, min: 0, max: 10, step: 0.1, label: 'Bokeh Scale' },
-      }),
-      'Ambient Occlusion': folder({
-        aoEnabled: { value: true, label: 'Enabled' },
-        aoIntensity: { value: 1.0, min: 0, max: 5, step: 0.1, label: 'Intensity' },
-      }),
-      Vignette: folder({
-        vignetteEnabled: { value: true, label: 'Enabled' },
-        vignetteIntensity: { value: 0.9, min: 0, max: 1, step: 0.01, label: 'Intensity' },
-      }),
+    Kuwahara: folder({
+      kuwaharaEnabled: { value: true, label: 'Enabled' },
+      kuwaharaRadius: { value: 7.0, min: 1, max: 8, step: 0.5, label: 'Radius' },
+      kuwaharaSharpness: { value: 4.0, min: 1, max: 8, step: 0.5, label: 'Sharpness' },
     }),
   });
+
+  // Hardcoded post-processing settings
+  const bloomEnabled = true;
+  const bloomIntensity = 0.3;
+  const bloomThreshold = 0.95;
+  const bloomSmoothing = 0.3;
+  const dofEnabled = true;
+  const dofFocusDistance = 0.01;
+  const dofFocalLength = 0.02;
+  const dofBokehScale = 2.0;
+  const aoEnabled = true;
+  const aoIntensity = 1.0;
+  const vignetteEnabled = true;
+  const vignetteIntensity = 0.9;
 
   return (
     <EffectComposer multisampling={8}>
@@ -532,6 +461,12 @@ function PostProcessing() {
         />
       )}
       <SMAA />
+      {kuwaharaEnabled && (
+        <KuwaharaComponent
+          radius={kuwaharaRadius}
+          sharpness={kuwaharaSharpness}
+        />
+      )}
       {vignetteEnabled && (
         <Vignette eskil={false} offset={0.1} darkness={vignetteIntensity} />
       )}
@@ -551,25 +486,15 @@ function TimeOfDayController() {
   const [{ timeOfDay }, set] = useControls(() => ({
     'Time of Day': folder({
       timeOfDay: { value: currentHour, min: 0, max: 24, step: 0.25, label: 'Hour (0–24)' },
-    }),
-    'Light Position': folder({
-      lightX: { value: SOLAR.lightX },
-      lightY: { value: SOLAR.lightY },
-      lightZ: { value: SOLAR.lightZ },
-      sunColorHex: { value: SOLAR.sunColorHex },
-    }),
-    Sky: folder({
-      skyTopHex: { value: SOLAR.skyTopHex },
-      skyMidHex: { value: SOLAR.skyMidHex },
-      skyHorizonHex: { value: SOLAR.skyHorizonHex },
-    }),
-    Clouds: folder({
-      cloudColorHex: { value: SOLAR.cloudColorHex },
-      shadowColorHex: { value: SOLAR.shadowColorHex },
-    }),
-    Lighting: folder({
-      ambientIntensity: { value: SOLAR.ambientIntensity },
-      directionalIntensity: { value: SOLAR.directionalIntensity },
+      lightX: { value: SOLAR.lightX, render: () => false },
+      lightY: { value: SOLAR.lightY, render: () => false },
+      lightZ: { value: SOLAR.lightZ, render: () => false },
+      sunColorHex: { value: SOLAR.sunColorHex, render: () => false },
+      ambientIntensity: { value: SOLAR.ambientIntensity, render: () => false },
+      directionalIntensity: { value: SOLAR.directionalIntensity, render: () => false },
+      skyTopHex: { value: SOLAR.skyTopHex, render: () => false },
+      skyMidHex: { value: SOLAR.skyMidHex, render: () => false },
+      skyHorizonHex: { value: SOLAR.skyHorizonHex, render: () => false },
     }),
   }));
 
@@ -580,13 +505,11 @@ function TimeOfDayController() {
       lightY: p.lightY,
       lightZ: p.lightZ,
       sunColorHex: p.sunColorHex,
+      ambientIntensity: p.ambientIntensity,
+      directionalIntensity: p.directionalIntensity,
       skyTopHex: p.skyTopHex,
       skyMidHex: p.skyMidHex,
       skyHorizonHex: p.skyHorizonHex,
-      cloudColorHex: p.cloudColorHex,
-      shadowColorHex: p.shadowColorHex,
-      ambientIntensity: p.ambientIntensity,
-      directionalIntensity: p.directionalIntensity,
     });
   }, [timeOfDay, set]);
 
@@ -599,9 +522,9 @@ function Scene() {
   return (
     <>
       <TimeOfDayController />
-      <SceneLighting />
       <GradientSky />
       <StarField />
+      <Moon />
       <CloudSky />
       <OceanWater />
       <PostProcessing />

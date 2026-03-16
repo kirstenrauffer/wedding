@@ -122,14 +122,10 @@ export default function StarField() {
     }),
   });
 
-  // Star controls — count and brightness
-  const { bgCount, brightCount, brightness } = useControls({
-    Stars: folder({
-      bgCount:     { value: STAR_CONFIG.bgCount,     min: 0, max: MAX_BG,     step: 100, label: 'Background Stars' },
-      brightCount: { value: STAR_CONFIG.brightCount, min: 0, max: MAX_BRIGHT,  step: 10,  label: 'Bright Stars' },
-      brightness:  { value: STAR_CONFIG.brightness,  min: 0, max: 2,           step: 0.05, label: 'Brightness' },
-    }),
-  });
+  // Star parameters (hardcoded)
+  const bgCount = STAR_CONFIG.bgCount;
+  const brightCount = STAR_CONFIG.brightCount;
+  const brightness = STAR_CONFIG.brightness;
 
   // ── Generate star data at max capacity (seeded so it's stable) ─────────────
   // We pre-allocate for MAX counts so changing the slider only adjusts
