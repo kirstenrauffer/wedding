@@ -17,6 +17,7 @@ import { useControls, folder } from 'leva';
 import CloudSky from './CloudSky';
 import StarField from './StarField';
 import Moon from './Moon';
+import Sun from './Sun';
 import { SOLAR, computeSolarParams } from '../utils/solar';
 import { KuwaharaEffect } from '../effects/KuwaharaEffect';
 
@@ -320,12 +321,20 @@ function OceanWater() {
     if (needsEnvUpdate.current) {
       water.visible = false;
       cubeCamera.position.set(0, 0, 0);
-      cubeCamera.update(renderer, sc);
+      try {
+        cubeCamera.update(renderer, sc);
+      } catch (e) {
+        console.warn('CubeCamera update error:', e);
+      }
       water.visible = true;
-      water.material.uniforms.envMap.value = cubeRenderTarget.texture;
+      if (water.material.uniforms.envMap) {
+        water.material.uniforms.envMap.value = cubeRenderTarget.texture;
+      }
       needsEnvUpdate.current = false;
     }
-    water.material.uniforms.time.value += delta * waveSpeed;
+    if (water.material.uniforms.time) {
+      water.material.uniforms.time.value += delta * waveSpeed;
+    }
   });
 
   return <primitive object={water} />;
@@ -498,6 +507,16 @@ function TimeOfDayController() {
     }),
   }));
 
+  // Auto-update disabled - slider works manually
+  // useEffect(() => {
+  //   const interval = setInterval(() => {
+  //     const now = new Date();
+  //     const realTimeOfDay = Math.round((now.getHours() + now.getMinutes() / 60) * 4) / 4;
+  //     set({ timeOfDay: realTimeOfDay });
+  //   }, 1000);
+  //   return () => clearInterval(interval);
+  // }, [set]);
+
   useEffect(() => {
     const p = computeSolarParams(timeOfDay);
     set({
@@ -524,6 +543,7 @@ function Scene() {
       <TimeOfDayController />
       <GradientSky />
       <StarField />
+      <Sun />
       <Moon />
       <CloudSky />
       <OceanWater />

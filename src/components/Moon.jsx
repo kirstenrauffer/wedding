@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect } from 'react';
+import { useRef, useMemo } from 'react';
 import { useControls, folder } from 'leva';
 import * as THREE from 'three';
 
@@ -77,25 +77,21 @@ export default function Moon() {
 
   const { timeOfDay } = useControls({
     'Time of Day': folder({
-      timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, label: 'Hour (0–24)', render: () => false },
+      timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, label: 'Hour (0–24)' },
     }),
   });
 
   // Moon only visible between sunset (18) and sunrise (6)
   const isNighttime = timeOfDay >= 18 || timeOfDay < 6;
 
-  // Update material opacity when timeOfDay changes
-  useEffect(() => {
-    if (materialRef.current) {
-      materialRef.current.opacity = isNighttime ? 1 : 0;
-    }
-  }, [isNighttime]);
-
   // Moon position: in the sky, visible from camera
   const moonPosition = new THREE.Vector3(20, 45, -80);
 
   // Create crater texture once
   const craterTexture = useMemo(() => createMoonTexture(), []);
+
+  // Only render moon at night
+  if (!isNighttime) return null;
 
   return (
     <mesh ref={meshRef} position={moonPosition} scale={5}>
