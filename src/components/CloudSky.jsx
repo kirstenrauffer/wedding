@@ -31,6 +31,7 @@ const CLOUD_FRAGMENT = /* glsl */ `
   uniform vec3 sunColor;
   uniform vec3 cloudColor;
   uniform vec3 cloudShadowColor;
+  uniform vec3 cloudShadowColor2;
   uniform float coverage;
   uniform float fluffiness;
   uniform float cloudScale;
@@ -40,6 +41,7 @@ const CLOUD_FRAGMENT = /* glsl */ `
   uniform float cloudTop;
   uniform float lightAbsorption;
   uniform float skyDarkening;
+  uniform float cloudInkStrength;
 
   varying vec3 vDirection;
 
@@ -194,16 +196,28 @@ const CLOUD_FRAGMENT = /* glsl */ `
         // sunDirection.y is positive when sun is above horizon (day), negative when below (night)
         float dayThreshold = smoothstep(-0.2, 0.15, sunDirection.y);
 
-        // Combine sun + ambient lighting (whiter ambient during day for white clouds)
+        // Color stratification based on density — dense core gets core color, edges get shadow colors
+        // Normalize density to a ~0-1 range for color blending (adjusted for typical density range)
+        float densityFraction = smoothstep(0.0, 0.4, density);
+
+        // Three-color blend: shadow2 (darkest) → shadow1 → core (lightest)
+        vec3 coreColor = mix(cloudColor, vec3(1.0), dayThreshold * 0.8);
+        vec3 midColor = mix(cloudColor * 0.85, vec3(0.9), dayThreshold * 0.7);
+        vec3 darkColor = mix(cloudShadowColor2, vec3(0.7), dayThreshold * 0.4);
+
+        // Blend between shadow colors and core based on density
+        vec3 baseColor = mix(darkColor, coreColor, densityFraction);
+        baseColor = mix(baseColor, midColor, smoothstep(0.0, 0.5, densityFraction) * 0.5);
+
+        // Combine with lighting
         vec3 ambientColor = mix(cloudShadowColor, vec3(1.0), dayThreshold * 0.6);
-        vec3 ambient = ambientColor * 0.3;
-        vec3 sunLit = sunColor * sunIllum * 0.8;
+        vec3 ambient = ambientColor * 0.4;
+        vec3 sunLit = sunColor * sunIllum * 0.9;
 
-        vec3 cloudColorAdjusted = mix(cloudColor, vec3(1.0), dayThreshold * 0.8);
-        vec3 luminance = (sunLit + ambient) * cloudColorAdjusted;
+        vec3 luminance = (sunLit + ambient) * baseColor;
 
-        // Beer-Lambert absorption
-        float sampleTransmittance = exp(-density * stepSize * lightAbsorption * 0.008);
+        // Increased opacity: higher light absorption makes clouds more opaque
+        float sampleTransmittance = exp(-density * stepSize * lightAbsorption * 0.015);
         vec3 integScatter = luminance * (1.0 - sampleTransmittance);
         scatteredLight += transmittance * integScatter;
         transmittance *= sampleTransmittance;
@@ -227,6 +241,15 @@ const CLOUD_FRAGMENT = /* glsl */ `
     // Very subtle horizon fade to blend with ocean
     float horizonFade = smoothstep(-0.5, 1.0, rd.y);
     alpha *= horizonFade;
+
+    // Cloud ink outlines — draw dark edges where transmittance is transitioning
+    // (transmittance near 0.5 = the cloud silhouette boundary)
+    float cloudEdge = 1.0 - smoothstep(0.0, 0.25, abs(transmittance - 0.5));
+    float cloudInk = cloudEdge * cloudInkStrength * horizonFade;
+    vec3 inkTone = vec3(0.05, 0.06, 0.08);
+    scatteredLight = mix(scatteredLight, inkTone, cloudInk);
+    // Brighten alpha at edge for crisp silhouette
+    alpha = alpha * (1.0 + cloudInk * 0.1);
 
     // Pre-multiply alpha so blending is correct
     gl_FragColor = vec4(scatteredLight * alpha, alpha);
@@ -274,6 +297,7 @@ export default function CloudSky() {
     sunColor:         { value: new THREE.Color(1, 0.95, 0.85) },
     cloudColor:       { value: new THREE.Color() },
     cloudShadowColor: { value: new THREE.Color() },
+    cloudShadowColor2:{ value: new THREE.Color() },
     coverage:         { value: 0.55 },
     fluffiness:       { value: 0.6 },
     cloudScale:       { value: 1.0 },
@@ -283,6 +307,7 @@ export default function CloudSky() {
     cloudTop:         { value: 2500.0 },
     lightAbsorption:  { value: 0.4 },
     skyDarkening:     { value: 0.87 },
+    cloudInkStrength: { value: 0.7 },
   }), []);
 
   // Full sky sphere covering all directions
@@ -306,6 +331,8 @@ export default function CloudSky() {
     mat.uniforms.sunColor.value.set(sunColorHex);
     mat.uniforms.cloudColor.value.set(cloudColorHex);
     mat.uniforms.cloudShadowColor.value.set(shadowColorHex);
+    // Darker shadow color for depth layering
+    mat.uniforms.cloudShadowColor2.value.set(new THREE.Color(shadowColorHex).multiplyScalar(0.6));
     mat.uniforms.coverage.value = coverage;
     mat.uniforms.fluffiness.value = fluffiness;
     mat.uniforms.cloudScale.value = cloudScale;
@@ -314,6 +341,7 @@ export default function CloudSky() {
     mat.uniforms.cloudBase.value = base;
     mat.uniforms.cloudTop.value = top;
     mat.uniforms.lightAbsorption.value = lightAbsorption;
+    mat.uniforms.cloudInkStrength.value = 0.7;
   });
 
   return (

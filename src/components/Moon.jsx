@@ -1,5 +1,4 @@
-import { useRef, useMemo } from 'react';
-import { useControls, folder } from 'leva';
+import { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 
 const MOON_VERTEX = /* glsl */ `
@@ -18,6 +17,7 @@ const MOON_VERTEX = /* glsl */ `
 
 const MOON_FRAGMENT = /* glsl */ `
   uniform sampler2D moonTexture;
+  uniform float moonOpacity;
 
   varying vec3 vNormal;
   varying vec3 vViewDir;
@@ -37,9 +37,27 @@ const MOON_FRAGMENT = /* glsl */ `
     // Combine texture with lighting (preserves crater detail)
     vec3 lit = textureColor * (diffuse + 0.5) + rim;
 
-    gl_FragColor = vec4(lit, 1.0);
+    gl_FragColor = vec4(lit, moonOpacity);
   }
 `;
+
+// Calculate moon opacity based on time of day
+function calculateMoonOpacity(hour) {
+  // Sunrise: fade out from 5:00 to 7:00
+  if (hour >= 5 && hour < 7) {
+    return 1.0 - (hour - 5) / 2.0; // smoothly fade 1 → 0
+  }
+  // Daytime: fully invisible
+  if (hour >= 7 && hour < 17) {
+    return 0.0;
+  }
+  // Sunset: fade in from 17:00 to 19:00
+  if (hour >= 17 && hour < 19) {
+    return (hour - 17) / 2.0; // smoothly fade 0 → 1
+  }
+  // Nighttime: fully visible (including 0:00–5:00)
+  return 1.0;
+}
 
 // Create moon texture with craters
 function createMoonTexture() {
@@ -71,18 +89,9 @@ function createMoonTexture() {
   return tex;
 }
 
-export default function Moon() {
+export default function Moon({ timeOfDay = 12 }) {
   const meshRef = useRef();
   const materialRef = useRef();
-
-  const { timeOfDay } = useControls({
-    'Time of Day': folder({
-      timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, label: 'Hour (0–24)' },
-    }),
-  });
-
-  // Moon only visible between sunset (18) and sunrise (6)
-  const isNighttime = timeOfDay >= 18 || timeOfDay < 6;
 
   // Moon position: in the sky, visible from camera
   const moonPosition = new THREE.Vector3(20, 45, -80);
@@ -90,8 +99,19 @@ export default function Moon() {
   // Create crater texture once
   const craterTexture = useMemo(() => createMoonTexture(), []);
 
-  // Only render moon at night
-  if (!isNighttime) return null;
+  // Create uniforms once, mutate in-place when opacity changes
+  const uniforms = useMemo(() => ({
+    moonTexture: { value: craterTexture },
+    moonOpacity: { value: 1.0 },
+  }), [craterTexture]);
+
+  // Calculate opacity based on time of day
+  const moonOpacity = useMemo(() => calculateMoonOpacity(timeOfDay), [timeOfDay]);
+
+  // Update uniform value when opacity changes
+  useEffect(() => {
+    uniforms.moonOpacity.value = moonOpacity;
+  }, [moonOpacity, uniforms]);
 
   return (
     <mesh ref={meshRef} position={moonPosition} scale={5}>
@@ -100,9 +120,7 @@ export default function Moon() {
         ref={materialRef}
         vertexShader={MOON_VERTEX}
         fragmentShader={MOON_FRAGMENT}
-        uniforms={{
-          moonTexture: { value: craterTexture },
-        }}
+        uniforms={uniforms}
         transparent
         depthWrite={false}
       />

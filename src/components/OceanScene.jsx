@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect } from 'react';
+import { useMemo, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   EffectComposer,
@@ -20,44 +20,43 @@ import Moon from './Moon';
 import Sun from './Sun';
 import { SOLAR, computeSolarParams } from '../utils/solar';
 import { KuwaharaEffect } from '../effects/KuwaharaEffect';
+import { OutlineEffect } from '../effects/OutlineEffect';
 
-// ─── Custom Water Shader (extended from Three.js Water) ───
-// Adds: Fresnel attenuation, depth-based absorption, subsurface scattering,
-// caustics pattern, soft foam, distance fog/blur
+// ─── Custom Water Shader (Watercolor Style) ───
+// Stylized watercolor aesthetic: flat color patches, colored moving shadows, painterly gradient easing, outlines, organic water movement
 
 const CUSTOM_FRAGMENT_SHADER = /* glsl */ `
-  uniform sampler2D mirrorSampler;
   uniform float alpha;
   uniform float time;
   uniform float size;
-  uniform float distortionScale;
   uniform sampler2D normalSampler;
   uniform vec3 sunColor;
   uniform vec3 sunDirection;
   uniform vec3 eye;
   uniform vec3 waterColor;
-
-  // Custom uniforms
-  uniform float choppiness;
-  uniform float fresnelStrength;
-  uniform float absorptionCoeff;
   uniform vec3 deepWaterColor;
   uniform float foamStrength;
-  uniform float scatterStrength;
-  uniform vec3 scatterColor;
-  uniform float specularShininess;
-  uniform float specularStrength;
-  uniform float refractionStrength;
-  uniform samplerCube envMap;
-  uniform float envMapIntensity;
   uniform float ambientIntensity;
   uniform float directionalIntensity;
 
-  varying vec4 mirrorCoord;
+  // Watercolor uniforms
+  uniform vec3 shadowColor;
+  uniform vec3 highlightColor;
+  uniform float shadowStrength;
+  uniform float shadowSpeed;
+
+  // Ink outline uniforms
+  uniform float inkWidth;
+  uniform float inkStrength;
+  uniform vec3 inkColor;
+
+  // Lighting uniforms
+  uniform float fresnelStrength;
+  uniform float absorptionCoeff;
+
   varying vec4 worldPosition;
 
   vec4 getNoise(vec2 uv) {
-    float chop = choppiness;
     vec2 uv0 = (uv / 103.0) + vec2(time / 17.0, time / 29.0);
     vec2 uv1 = uv / 107.0 - vec2(time / -19.0, time / 31.0);
     vec2 uv2 = uv / vec2(8907.0, 9803.0) + vec2(time / 101.0, time / 97.0);
@@ -66,14 +65,7 @@ const CUSTOM_FRAGMENT_SHADER = /* glsl */ `
       texture2D(normalSampler, uv1) +
       texture2D(normalSampler, uv2) +
       texture2D(normalSampler, uv3);
-    return noise * 0.5 * chop - chop;
-  }
-
-  void sunLight(const vec3 surfaceNormal, const vec3 eyeDirection, float shiny, float spec, float diffuse, inout vec3 diffuseColor, inout vec3 specularColor) {
-    vec3 reflection = normalize(reflect(-sunDirection, surfaceNormal));
-    float direction = max(0.0, dot(eyeDirection, reflection));
-    specularColor += pow(direction, shiny) * sunColor * spec * specularStrength * directionalIntensity;
-    diffuseColor += max(dot(sunDirection, surfaceNormal), 0.0) * sunColor * diffuse * directionalIntensity;
+    return noise * 0.5;
   }
 
   #include <common>
@@ -83,110 +75,72 @@ const CUSTOM_FRAGMENT_SHADER = /* glsl */ `
   #include <logdepthbuf_pars_fragment>
   #include <lights_pars_begin>
   #include <shadowmap_pars_fragment>
-  #include <shadowmask_pars_fragment>
-
-  // Reinhard tone-map — clamps unbounded HDR sky values to [0,1) range
-  vec3 envTonemap(vec3 c) {
-    return c / (1.0 + c);
-  }
 
   void main() {
     #include <logdepthbuf_fragment>
 
+    // 1. Four-layer noise (getNoise function exactly as before)
     vec4 noise = getNoise(worldPosition.xz * size);
-    vec3 surfaceNormal = normalize(noise.xzy * vec3(1.5, 1.0, 1.5));
+    float height = noise.y * 0.5 + 0.5;  // normalise to [0,1]
 
-    vec3 diffuseLight = vec3(0.0);
-    vec3 specularLight = vec3(0.0);
+    // 2. Two offset shadow bands (smoothstep — like the blog's double lerp)
+    //    Each band scrolls independently for the "moving shadow" effect
+    float band1 = smoothstep(0.45, 0.55,
+        height + sin(worldPosition.x * 0.008 + time * shadowSpeed) * 0.2);
+    float band2 = smoothstep(0.38, 0.48,
+        height - sin(worldPosition.z * 0.006 + time * shadowSpeed * 0.7) * 0.18);
 
+    // 3. Dual lerp → produces that saturated dark watery edge from over-wet watercolor
+    float shadow = mix(band1, 1.0 - band2, 0.35) * shadowStrength;
+
+    // 3b. Ink outlines — draw thin contour lines at the center of each band's transition
+    // Higher inkWidth = thinner lines. lineWidth safeguard prevents division issues.
+    float lineWidth = 0.08 / max(inkWidth, 0.1);
+    float ink1 = 1.0 - smoothstep(0.0, lineWidth, abs(band1 - 0.5));
+    float ink2 = 1.0 - smoothstep(0.0, lineWidth, abs(band2 - 0.5));
+    float inkMask = max(ink1, ink2) * inkStrength;
+
+    // 4. Base color: lerp between shadowColor and waterColor by shadow factor
+    vec3 color = mix(shadowColor, waterColor, shadow);
+
+    // 5. Depth attenuation: exponential falloff toward deep water color with distance
+    float dist = 1.0 - exp(-absorptionCoeff * 0.0001 * length(worldPosition.xz));
+    color = mix(color, deepWaterColor, dist * 0.6);
+
+    // 6. Sun directional response — brighter facing sun, darker away (not just warmth)
+    float sunDiff = max(0.0, dot(vec3(0.0, 1.0, 0.0), sunDirection));
+    color *= (0.6 + sunDiff * directionalIntensity * 0.6);
+
+    // 7. Ambient sky tint — very subtle
+    color += vec3(0.02, 0.04, 0.06) * ambientIntensity;
+
+    // 8. Foam at peaks
+    float foam = smoothstep(0.72, 0.95, height) * foamStrength;
+    color = mix(color, highlightColor, foam);
+
+    // 8b. Fresnel — camera-angle-dependent sheen at grazing angles
     vec3 worldToEye = eye - worldPosition.xyz;
-    vec3 eyeDirection = normalize(worldToEye);
-    float distanceToEye = length(worldToEye);
+    vec3 eyeDir = normalize(worldToEye);
+    vec3 surfaceNormal = vec3(0.0, 1.0, 0.0); // flat plane normal
+    float cosTheta = max(dot(eyeDir, surfaceNormal), 0.0);
+    float fresnel = fresnelStrength * pow(1.0 - cosTheta, 4.0);
+    vec3 fresnelColor = mix(waterColor, highlightColor, 0.6);
+    color = mix(color, fresnelColor, fresnel * 0.35);
 
-    sunLight(surfaceNormal, eyeDirection, specularShininess, 1.0, 0.3, diffuseLight, specularLight);
+    // 9. Ink lines over the final color
+    color = mix(color, inkColor, inkMask);
 
-    // Refraction distortion
-    vec2 distortion = surfaceNormal.xz * (0.001 + 1.0 / distanceToEye) * distortionScale;
-    vec2 refrDistortion = distortion * refractionStrength;
-
-    // Planar mirror reflection sample — tone-map since it captures raw HDR scene
-    vec3 mirrorReflection = envTonemap(vec3(texture2D(mirrorSampler, mirrorCoord.xy / mirrorCoord.w + distortion)));
-
-    // Refraction sample
-    vec3 refractionSample = envTonemap(vec3(texture2D(mirrorSampler, mirrorCoord.xy / mirrorCoord.w + refrDistortion * 1.5)));
-
-    // Environment map samples — tone-mapped so HDR sky doesn't blow out to white
-    vec3 smoothReflDir = reflect(-eyeDirection, mix(vec3(0.0, 1.0, 0.0), surfaceNormal, 0.6));
-    vec3 envReflection = envTonemap(textureCube(envMap, smoothReflDir).rgb);
-
-    vec3 horizonDir = normalize(vec3(eyeDirection.x, 0.01, eyeDirection.z));
-    vec3 envHorizon = envTonemap(textureCube(envMap, horizonDir).rgb);
-
-    vec3 envSkyUp = envTonemap(textureCube(envMap, vec3(0.0, 1.0, 0.0)).rgb);
-    vec3 envSkyAmbient = mix(envSkyUp, envHorizon, 0.3);
-
-    // Blend env reflection into planar mirror — keep subtle, mirror is more accurate
-    vec3 reflectionSample = mix(mirrorReflection, envReflection, envMapIntensity * 0.35);
-
-    // Fresnel (Schlick approximation) with configurable strength
-    float cosTheta = max(dot(eyeDirection, surfaceNormal), 0.0);
-    float rf0 = 0.02 * fresnelStrength;
-    float reflectance = rf0 + (1.0 - rf0) * pow(1.0 - cosTheta, 5.0);
-
-    // Depth-based absorption / attenuation
-    float depthFactor = 1.0 - exp(-absorptionCoeff * 0.01 * distanceToEye);
-    vec3 absorbedColor = mix(waterColor, deepWaterColor, depthFactor);
-
-    // Subtle sky ambient tint — lerp toward sky-tinted version, not raw multiply
-    float skyTintAmt = envMapIntensity * 0.15;
-    absorbedColor = mix(absorbedColor, absorbedColor * (vec3(0.5) + envSkyAmbient * 0.5), skyTintAmt);
-
-    // Apply ambient light fill
-    absorbedColor += envSkyAmbient * ambientIntensity * 0.2;
-
-    // Subsurface scattering — mostly sun colored, slight sky tint
-    float sss = pow(max(0.0, dot(eyeDirection, -sunDirection)), 4.0) * scatterStrength;
-    vec3 sssLight = mix(sunColor, sunColor * (vec3(0.7) + envSkyAmbient * 0.3), envMapIntensity * 0.2);
-    vec3 subsurface = sss * scatterColor * sssLight * directionalIntensity;
-
-    // Foam at wave peaks
-    float foamFactor = smoothstep(0.5, 1.0, noise.y * 0.5 + 0.5) * foamStrength;
-    vec3 foam = vec3(foamFactor) * sssLight;
-
-    // Combine: scatter + absorbed color base, blend with reflections via fresnel
-    vec3 scatter = max(0.0, dot(surfaceNormal, eyeDirection)) * absorbedColor;
-    vec3 waterBase = sunColor * diffuseLight * 0.3 + scatter + subsurface;
-
-    // Mix refraction into the base
-    vec3 refractedBase = mix(waterBase, refractionSample * absorbedColor, (1.0 - reflectance) * 0.3);
-
-    vec3 albedo = mix(refractedBase * getShadowMask(), reflectionSample, reflectance);
-    albedo += specularLight * (1.0 - reflectance) * 0.5;
-    albedo += foam;
-
-    gl_FragColor = vec4(albedo, alpha);
+    gl_FragColor = vec4(color, alpha);
 
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
     #include <fog_fragment>
   }
 `;
-
 // ─── Ocean Water Component ───
 
 function OceanWater() {
-  const needsEnvUpdate = useRef(true);
   const { scene } = useThree();
-
-  // CubeCamera for capturing sky into an environment map
-  const cubeRenderTarget = useMemo(
-    () => new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType }),
-    []
-  );
-  const cubeCamera = useMemo(
-    () => new THREE.CubeCamera(1, 500000, cubeRenderTarget),
-    [cubeRenderTarget]
-  );
 
   const {
     lightX,
@@ -210,34 +164,15 @@ function OceanWater() {
   const waterColorHex = '#1A4A6A';
   const deepWaterColorHex = '#0A2540';
   const alpha = 1.0;
-  const distortionScale = 4.1;
   const waveSize = 1.6;
   const waveSpeed = 0.3;
-  const choppiness = 1.0;
-  const fresnelStrength = 1.0;
-  const absorptionCoeff = 0.8;
-  const foamStrength = 0.15;
-  const scatterStrength = 0.05;
-  const scatterColorHex = '#228ba3';
-  const specularShininess = 100;
-  const specularStrength = 1.0;
-  const refractionStrength = 1.0;
-  const reflectionResolution = 1024;
-  const envMapIntensity = 1.0;
+  const foamStrength = 0.3;
 
-  // Read sky colors so env map updates when sky changes (hidden from UI)
-  const { skyTopHex, skyMidHex, skyHorizonHex } = useControls({
-    'Time of Day': folder({
-      skyTopHex: { value: '#1E5B8E', render: () => false },
-      skyMidHex: { value: '#4A90C4', render: () => false },
-      skyHorizonHex: { value: '#87BBDA', render: () => false },
-    }),
-  });
-
-  // Flag env map update when sky colors change
-  useEffect(() => {
-    needsEnvUpdate.current = true;
-  }, [skyTopHex, skyMidHex, skyHorizonHex]);
+  // Watercolor uniforms
+  const shadowColorHex = '#0A2A3E';
+  const highlightColorHex = '#B0D8F0';
+  const shadowStrength = 1.5;
+  const shadowSpeed = 0.4;
 
   const waterNormals = useMemo(() => {
     const tex = new THREE.TextureLoader().load('/textures/waternormals.jpg');
@@ -252,13 +187,13 @@ function OceanWater() {
   const water = useMemo(() => {
     const geom = new THREE.PlaneGeometry(30000, 30000);
     const w = new Water(geom, {
-      textureWidth: reflectionResolution,
-      textureHeight: reflectionResolution,
+      textureWidth: 64,
+      textureHeight: 64,
       waterNormals,
       sunDirection,
       sunColor: new THREE.Color(sunColorHex),
       waterColor: new THREE.Color(waterColorHex),
-      distortionScale,
+      distortionScale: 0,
       fog: false,
       alpha,
     });
@@ -266,29 +201,32 @@ function OceanWater() {
     // Replace fragment shader with our custom one
     w.material.fragmentShader = CUSTOM_FRAGMENT_SHADER;
 
-    // Add custom uniforms
-    w.material.uniforms.choppiness = { value: choppiness };
-    w.material.uniforms.fresnelStrength = { value: fresnelStrength };
-    w.material.uniforms.absorptionCoeff = { value: absorptionCoeff };
+    // Add watercolor uniforms
+    w.material.uniforms.shadowColor = { value: new THREE.Color(shadowColorHex) };
+    w.material.uniforms.highlightColor = { value: new THREE.Color(highlightColorHex) };
+    w.material.uniforms.shadowStrength = { value: shadowStrength };
+    w.material.uniforms.shadowSpeed = { value: shadowSpeed };
     w.material.uniforms.deepWaterColor = { value: new THREE.Color(deepWaterColorHex) };
     w.material.uniforms.foamStrength = { value: foamStrength };
-    w.material.uniforms.scatterStrength = { value: scatterStrength };
-    w.material.uniforms.scatterColor = { value: new THREE.Color(scatterColorHex) };
-    w.material.uniforms.specularShininess = { value: specularShininess };
-    w.material.uniforms.specularStrength = { value: specularStrength };
-    w.material.uniforms.refractionStrength = { value: refractionStrength };
-    w.material.uniforms.envMap = { value: cubeRenderTarget.texture };
-    w.material.uniforms.envMapIntensity = { value: envMapIntensity };
     w.material.uniforms.ambientIntensity = { value: ambientIntensity };
     w.material.uniforms.directionalIntensity = { value: directionalIntensity };
+
+    // Add ink outline uniforms
+    w.material.uniforms.inkWidth = { value: 1.0 };
+    w.material.uniforms.inkStrength = { value: 0.9 };
+    w.material.uniforms.inkColor = { value: new THREE.Color('#07090B') };
+
+    // Add lighting uniforms
+    w.material.uniforms.fresnelStrength = { value: 1.0 };
+    w.material.uniforms.absorptionCoeff = { value: 0.8 };
 
     w.material.needsUpdate = true;
     w.rotation.x = -Math.PI / 2;
 
     return w;
-    // Only recreate on resolution change (requires new render target)
+    // Only recreate on waterNormals change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reflectionResolution, waterNormals, cubeRenderTarget]);
+  }, [waterNormals]);
 
   // Update uniforms reactively without recreating the water object
   useEffect(() => {
@@ -296,42 +234,22 @@ function OceanWater() {
     u.sunDirection.value.copy(sunDirection);
     u.sunColor.value.set(sunColorHex);
     u.waterColor.value.set(waterColorHex);
-    u.distortionScale.value = distortionScale;
     u.alpha.value = alpha;
     u.size.value = waveSize;
-    u.choppiness.value = choppiness;
-    u.fresnelStrength.value = fresnelStrength;
-    u.absorptionCoeff.value = absorptionCoeff;
+    u.shadowColor.value.set(shadowColorHex);
+    u.highlightColor.value.set(highlightColorHex);
+    u.shadowStrength.value = shadowStrength;
+    u.shadowSpeed.value = shadowSpeed;
     u.deepWaterColor.value.set(deepWaterColorHex);
     u.foamStrength.value = foamStrength;
-    u.scatterStrength.value = scatterStrength;
-    u.scatterColor.value.set(scatterColorHex);
-    u.specularShininess.value = specularShininess;
-    u.specularStrength.value = specularStrength;
-    u.refractionStrength.value = refractionStrength;
-    u.envMapIntensity.value = envMapIntensity;
     u.ambientIntensity.value = ambientIntensity;
     u.directionalIntensity.value = directionalIntensity;
-    needsEnvUpdate.current = true;
+    u.fresnelStrength.value = 1.0;
+    u.absorptionCoeff.value = 0.8;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [water, sunDirection, sunColorHex, ambientIntensity, directionalIntensity]);
 
   useFrame(({ gl: renderer, scene: sc }, delta) => {
-    // Update env map when sky/light params changed
-    if (needsEnvUpdate.current) {
-      water.visible = false;
-      cubeCamera.position.set(0, 0, 0);
-      try {
-        cubeCamera.update(renderer, sc);
-      } catch (e) {
-        console.warn('CubeCamera update error:', e);
-      }
-      water.visible = true;
-      if (water.material.uniforms.envMap) {
-        water.material.uniforms.envMap.value = cubeRenderTarget.texture;
-      }
-      needsEnvUpdate.current = false;
-    }
     if (water.material.uniforms.time) {
       water.material.uniforms.time.value += delta * waveSpeed;
     }
@@ -414,6 +332,7 @@ function GradientSky() {
 // ─── Post Processing ───
 
 const KuwaharaComponent = wrapEffect(KuwaharaEffect);
+const OutlineComponent = wrapEffect(OutlineEffect);
 
 
 function PostProcessing() {
@@ -421,11 +340,19 @@ function PostProcessing() {
     kuwaharaEnabled,
     kuwaharaRadius,
     kuwaharaSharpness,
+    outlineEnabled,
+    outlineThreshold,
+    outlineStrength,
   } = useControls({
     Kuwahara: folder({
       kuwaharaEnabled: { value: true, label: 'Enabled' },
       kuwaharaRadius: { value: 7.0, min: 1, max: 8, step: 0.5, label: 'Radius' },
       kuwaharaSharpness: { value: 4.0, min: 1, max: 8, step: 0.5, label: 'Sharpness' },
+    }),
+    Outline: folder({
+      outlineEnabled: { value: true, label: 'Enabled' },
+      outlineThreshold: { value: 0.1, min: 0.01, max: 0.3, step: 0.01, label: 'Threshold' },
+      outlineStrength: { value: 1.5, min: 0, max: 3, step: 0.1, label: 'Strength' },
     }),
   });
 
@@ -470,6 +397,12 @@ function PostProcessing() {
         />
       )}
       <SMAA />
+      {outlineEnabled && (
+        <OutlineComponent
+          threshold={outlineThreshold}
+          strength={outlineStrength}
+        />
+      )}
       {kuwaharaEnabled && (
         <KuwaharaComponent
           radius={kuwaharaRadius}
@@ -538,13 +471,17 @@ function TimeOfDayController() {
 // ─── Main Scene ───
 
 function Scene() {
+  const { timeOfDay } = useControls('Time of Day', {
+    timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, label: 'Hour (0–24)', render: () => false },
+  });
+
   return (
     <>
       <TimeOfDayController />
       <GradientSky />
       <StarField />
       <Sun />
-      <Moon />
+      <Moon timeOfDay={timeOfDay} />
       <CloudSky />
       <OceanWater />
       <PostProcessing />
