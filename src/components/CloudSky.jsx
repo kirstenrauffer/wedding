@@ -5,10 +5,10 @@ import { useControls, folder } from 'leva';
 import { SOLAR } from '../utils/solar';
 
 // ─── Volumetric Cloud Sky ───
-// Ray-marched clouds using David Hoskins' noise technique from Shadertoy.
+// Ray-marched clouds using David Hoskins' FBM noise technique from Shadertoy.
 // Features: FBM noise, Henyey-Greenstein scattering, Beer-Lambert absorption,
-// subtle shape influence (hearts, flowers, cats) blended into cloud density.
-// Future: sky color will change based on visitor's time of day.
+// procedural cloud coverage, interactive sky darkening for time-of-day effects.
+// Future: integrate with time-of-day system for automatic sky transitions.
 
 const CLOUD_VERTEX = /* glsl */ `
   varying vec3 vDirection;
@@ -17,6 +17,7 @@ const CLOUD_VERTEX = /* glsl */ `
     // Mesh follows camera (translation only, no rotation)
     // so model-space position == world-space direction from camera
     vDirection = normalize(position);
+
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
@@ -37,8 +38,8 @@ const CLOUD_FRAGMENT = /* glsl */ `
   uniform float cloudDensity;
   uniform float cloudBase;
   uniform float cloudTop;
-  uniform float shapeStrength;
   uniform float lightAbsorption;
+  uniform float skyDarkening;
 
   varying vec3 vDirection;
 
@@ -83,14 +84,14 @@ const CLOUD_FRAGMENT = /* glsl */ `
     return value;
   }
 
-  // Cheaper FBM for light marching (3 octaves)
+  // Cheaper FBM for light marching (4 octaves)
   float fbmLight(vec3 p) {
     float value = 0.0;
     float amplitude = 0.5;
     float frequency = 1.0;
     float gain = mix(0.35, 0.6, fluffiness);
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
       value += amplitude * noise(p * frequency);
       frequency *= 2.0;
       amplitude *= gain;
@@ -98,38 +99,6 @@ const CLOUD_FRAGMENT = /* glsl */ `
     return value;
   }
 
-  // ─── Heart SDF (2D) ───
-  float sdHeart(vec2 p) {
-    p.x = abs(p.x);
-    if (p.y + p.x > 1.0) {
-      return length(p - vec2(0.25, 0.75)) - sqrt(2.0) / 4.0;
-    }
-    float a = p.x;
-    float b = p.y - 1.0;
-    float c = max(p.x + p.y, 0.0) * 0.5;
-    return sqrt(min(a * a + b * b, (a - c) * (a - c) + (p.y - c) * (p.y - c)))
-           * sign(p.x - p.y);
-  }
-
-  // Tile hearts across the sky — they drift with the wind
-  float shapeInfluence(vec2 p) {
-    // Hearts move with the cloud wind
-    p -= vec2(time * cloudSpeed * 120.0, time * cloudSpeed * 60.0);
-
-    float cellSize = 8000.0;
-    vec2 cellId = floor(p / cellSize);
-    vec2 cell = fract(p / cellSize) - 0.5; // local coords -0.5 to 0.5
-
-    // Per-cell random offset + scale to break the grid pattern
-    float h1 = fract(sin(dot(cellId, vec2(127.1, 311.7))) * 43758.5453);
-    float h2 = fract(sin(dot(cellId, vec2(269.5, 183.3))) * 43758.5453);
-    cell += (vec2(h1, h2) - 0.5) * 0.25;
-    float scale = 0.28 + h1 * 0.1;
-
-    vec2 lp = cell / scale;
-    float d = sdHeart(lp);
-    return 1.0 - smoothstep(-0.05, 0.15, d);
-  }
 
   // ─── Henyey-Greenstein phase function ───
   float hg(float cosAngle, float g) {
@@ -137,7 +106,7 @@ const CLOUD_FRAGMENT = /* glsl */ `
     return (1.0 - g2) / (4.0 * 3.14159 * pow(1.0 + g2 - 2.0 * g * cosAngle, 1.5));
   }
 
-  // ─── Cloud density (full, used on primary ray) ───
+  // ─── Cloud density (David Hoskins FBM-based) ───
   float sampleDensity(vec3 pos) {
     float heightFraction = (pos.y - cloudBase) / (cloudTop - cloudBase);
     if (heightFraction < 0.0 || heightFraction > 1.0) return 0.0;
@@ -146,20 +115,13 @@ const CLOUD_FRAGMENT = /* glsl */ `
     float heightProfile = smoothstep(0.0, 0.15, heightFraction)
                         * smoothstep(1.0, 0.7, heightFraction);
 
-    // Wind speed matched to shape drift so shapes stay coherent
+    // Wind-driven FBM sampling
     vec3 windOffset = vec3(time * cloudSpeed * 120.0, 0.0, time * cloudSpeed * 60.0);
     float rawDensity = fbm((pos + windOffset) * cloudScale * 0.001);
 
-    // Normal noise-driven clouds
+    // Noise-based density with coverage threshold
     float coverageThreshold = 1.0 - coverage;
-    float normalDensity = smoothstep(coverageThreshold, coverageThreshold + 0.15, rawDensity);
-
-    // Heart-shaped clouds: SDF defines shape, noise adds texture inside
-    float heartMask = shapeInfluence(pos.xz);
-    float heartDensity = heartMask * (0.4 + 0.6 * rawDensity);
-
-    // Blend between normal clouds and heart clouds
-    float density = mix(normalDensity, heartDensity, shapeStrength);
+    float density = smoothstep(coverageThreshold, coverageThreshold + 0.15, rawDensity);
 
     return density * heightProfile * cloudDensity;
   }
@@ -185,11 +147,6 @@ const CLOUD_FRAGMENT = /* glsl */ `
   void main() {
     vec3 rd = normalize(vDirection);
 
-    // Only render above horizon
-    if (rd.y < 0.002) {
-      discard;
-    }
-
     vec3 ro = cameraPos;
 
     // Ray-plane intersection with cloud layer
@@ -206,19 +163,16 @@ const CLOUD_FRAGMENT = /* glsl */ `
     tNear = max(tNear, 0.0);
     tFar  = min(tFar, 25000.0);
 
-    // Ray march
-    const int STEPS = 40;
-    const int LIGHT_STEPS = 4;
+    // Simplified ray march with fewer steps for stylized look
+    const int STEPS = 22;
     float stepSize = (tFar - tNear) / float(STEPS);
 
     float transmittance = 1.0;
     vec3 scatteredLight = vec3(0.0);
 
-    // Multi-lobe phase (forward scatter + back scatter + isotropic)
+    // Sun disk effect
     float cosAngle = dot(rd, sunDirection);
-    float phase = hg(cosAngle, 0.3) * 0.6
-                + hg(cosAngle, -0.15) * 0.15
-                + 0.25;
+    float sunDisk = pow(max(0.0, cosAngle), 1500.0) * 2.0; // sharp sun disk
 
     // Jitter start position to reduce banding
     float jitter = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) * stepSize;
@@ -232,39 +186,43 @@ const CLOUD_FRAGMENT = /* glsl */ `
       float density = sampleDensity(pos);
 
       if (density > 0.001) {
-        // Light march toward sun
-        float lightDepth = 0.0;
-        float lightMarchDist = (cloudTop - pos.y) / max(sunDirection.y, 0.05);
-        lightMarchDist = min(lightMarchDist, 1000.0);
-        float lightStep = lightMarchDist / float(LIGHT_STEPS);
+        // Simple sun illumination with power falloff
+        float sunIllum = pow(max(0.0, dot(normalize(sunDirection), normalize(pos - ro))), 10.0);
 
-        for (int j = 1; j <= LIGHT_STEPS; j++) {
-          vec3 lightPos = pos + sunDirection * float(j) * lightStep;
-          lightDepth += sampleDensityLight(lightPos) * lightStep;
-        }
+        // Combine sun + ambient lighting (original, unchanged for night)
+        vec3 ambient = cloudShadowColor * 0.15;
+        vec3 sunLit = sunColor * sunIllum * 0.8;
 
-        float lightTransmittance = exp(-lightDepth * lightAbsorption * 0.005);
+        // Use sun elevation to determine day vs night (not brightness, which is always bright)
+        // sunDirection.y is positive when sun is above horizon (day), negative when below (night)
+        float dayThreshold = smoothstep(-0.2, 0.15, sunDirection.y);
+        vec3 cloudColorAdjusted = mix(cloudColor, vec3(1.0), dayThreshold * 0.8);
+        vec3 luminance = (sunLit + ambient) * cloudColorAdjusted;
 
-        // Combine sun + ambient
-        vec3 ambient = cloudShadowColor * 0.2;
-        vec3 sunLit  = sunColor * lightTransmittance * phase * 0.35;
-        vec3 luminance = (sunLit + ambient) * cloudColor;
-
-        // Beer-Lambert for primary ray
-        float sampleTransmittance = exp(-density * stepSize * lightAbsorption * 0.01);
+        // Beer-Lambert absorption
+        float sampleTransmittance = exp(-density * stepSize * lightAbsorption * 0.008);
         vec3 integScatter = luminance * (1.0 - sampleTransmittance);
         scatteredLight += transmittance * integScatter;
-        transmittance  *= sampleTransmittance;
+        transmittance *= sampleTransmittance;
       }
     }
+
+    // Add sun disk glow
+    scatteredLight += sunColor * sunDisk * transmittance * 0.6;
 
     // Tone-map accumulated light to prevent HDR blowout
     scatteredLight = scatteredLight / (1.0 + scatteredLight);
 
-    float alpha = (1.0 - transmittance) * 0.8; // cap max opacity
+    // Apply vignette darkening based on skyDarkening slider
+    float radialDist = length(rd.xz);
+    float vignette = smoothstep(1.5, 0.3, radialDist);
+    float vignetteFade = mix(1.0, vignette, skyDarkening);
+    scatteredLight *= vignetteFade;
 
-    // Gradual fade near horizon
-    float horizonFade = smoothstep(0.005, 0.2, rd.y);
+    float alpha = (1.0 - transmittance) * 0.85;
+
+    // Very subtle horizon fade to blend with ocean
+    float horizonFade = smoothstep(-0.5, 1.0, rd.y);
     alpha *= horizonFade;
 
     // Pre-multiply alpha so blending is correct
@@ -297,20 +255,18 @@ export default function CloudSky() {
     density,
     base,
     top,
-    shapeStrength,
     lightAbsorption,
     cloudColorHex,
     shadowColorHex,
   } = useControls({
     Clouds: folder({
-      coverage:       { value: 0.35, min: 0, max: 1, step: 0.01, label: 'Coverage' },
-      fluffiness:     { value: 0.6,  min: 0, max: 1, step: 0.01, label: 'Fluffiness' },
-      cloudScale:     { value: 1.0,  min: 0.1, max: 5, step: 0.1, label: 'Scale' },
+      coverage:       { value: 0.44, min: 0, max: 1, step: 0.01, label: 'Coverage' },
+      fluffiness:     { value: 0.47,  min: 0, max: 1, step: 0.01, label: 'Fluffiness' },
+      cloudScale:     { value: 0.6,  min: 0.1, max: 5, step: 0.1, label: 'Scale' },
       cloudSpeed:     { value: 0.3,  min: 0, max: 2, step: 0.05, label: 'Wind Speed' },
-      density:        { value: 0.5,  min: 0.1, max: 3, step: 0.1, label: 'Density' },
-      base:           { value: 800,  min: 200, max: 2000, step: 50, label: 'Base Altitude' },
+      density:        { value: 0.65, min: 0.1, max: 3, step: 0.1, label: 'Density' },
+      base:           { value: -100,  min: -100, max: 2000, step: 50, label: 'Base Altitude' },
       top:            { value: 2500, min: 500, max: 5000, step: 50, label: 'Top Altitude' },
-      shapeStrength:  { value: 0.35, min: 0, max: 1.0, step: 0.01, label: 'Shape Influence' },
       lightAbsorption:{ value: 1.0,  min: 0.1, max: 3, step: 0.1, label: 'Light Absorption' },
       cloudColorHex:  { value: SOLAR.cloudColorHex, label: 'Cloud Color' },
       shadowColorHex: { value: SOLAR.shadowColorHex, label: 'Shadow Color' },
@@ -333,15 +289,15 @@ export default function CloudSky() {
     cloudScale:       { value: 1.0 },
     cloudSpeed:       { value: 0.3 },
     cloudDensity:     { value: 1.0 },
-    cloudBase:        { value: 800.0 },
+    cloudBase:        { value: 200.0 },
     cloudTop:         { value: 2500.0 },
-    shapeStrength:    { value: 0.15 },
     lightAbsorption:  { value: 1.0 },
+    skyDarkening:     { value: 0.87 },
   }), []);
 
-  // Upper hemisphere only (slight overlap past equator)
+  // Full sky sphere covering all directions
   const geometry = useMemo(
-    () => new THREE.SphereGeometry(8000, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.62),
+    () => new THREE.SphereGeometry(8000, 32, 16, 0, Math.PI * 2, 0, Math.PI),
     [],
   );
 
@@ -365,7 +321,6 @@ export default function CloudSky() {
     mat.uniforms.cloudDensity.value = density;
     mat.uniforms.cloudBase.value = base;
     mat.uniforms.cloudTop.value = top;
-    mat.uniforms.shapeStrength.value = shapeStrength;
     mat.uniforms.lightAbsorption.value = lightAbsorption;
   });
 

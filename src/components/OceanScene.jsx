@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { Water } from 'three/examples/jsm/objects/Water.js';
 import { useControls, folder } from 'leva';
 import CloudSky from './CloudSky';
+import StarField from './StarField';
 import { SOLAR, computeSolarParams } from '../utils/solar';
 
 // ─── Custom Water Shader (extended from Three.js Water) ───
@@ -499,7 +500,7 @@ function PostProcessing() {
       }),
       Vignette: folder({
         vignetteEnabled: { value: true, label: 'Enabled' },
-        vignetteIntensity: { value: 0.3, min: 0, max: 1, step: 0.01, label: 'Intensity' },
+        vignetteIntensity: { value: 0.9, min: 0, max: 1, step: 0.01, label: 'Intensity' },
       }),
     }),
   });
@@ -562,13 +563,13 @@ function TimeOfDayController() {
       skyMidHex: { value: SOLAR.skyMidHex },
       skyHorizonHex: { value: SOLAR.skyHorizonHex },
     }),
-    Lighting: folder({
-      ambientIntensity: { value: SOLAR.ambientIntensity },
-      directionalIntensity: { value: SOLAR.directionalIntensity },
-    }),
     Clouds: folder({
       cloudColorHex: { value: SOLAR.cloudColorHex },
       shadowColorHex: { value: SOLAR.shadowColorHex },
+    }),
+    Lighting: folder({
+      ambientIntensity: { value: SOLAR.ambientIntensity },
+      directionalIntensity: { value: SOLAR.directionalIntensity },
     }),
   }));
 
@@ -582,10 +583,10 @@ function TimeOfDayController() {
       skyTopHex: p.skyTopHex,
       skyMidHex: p.skyMidHex,
       skyHorizonHex: p.skyHorizonHex,
-      ambientIntensity: p.ambientIntensity,
-      directionalIntensity: p.directionalIntensity,
       cloudColorHex: p.cloudColorHex,
       shadowColorHex: p.shadowColorHex,
+      ambientIntensity: p.ambientIntensity,
+      directionalIntensity: p.directionalIntensity,
     });
   }, [timeOfDay, set]);
 
@@ -600,6 +601,7 @@ function Scene() {
       <TimeOfDayController />
       <SceneLighting />
       <GradientSky />
+      <StarField />
       <CloudSky />
       <OceanWater />
       <PostProcessing />
