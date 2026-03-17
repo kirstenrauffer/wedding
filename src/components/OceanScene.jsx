@@ -36,8 +36,8 @@ function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightI
     } else if (timeOfDay >= 5 && timeOfDay < 8) {
       // Sunrise transition
       return transitionColor;
-    } else if (timeOfDay >= 18 && timeOfDay < 20) {
-      // Sunset transition
+    } else if (timeOfDay >= 18 && timeOfDay < 21) {
+      // Sunset transition (smooth fade to night until 9 PM)
       return transitionColor;
     } else {
       // Night
@@ -58,7 +58,7 @@ function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightI
   const nightFactor = useMemo(() => {
     if (timeOfDay >= 7 && timeOfDay <= 17) return 1;       // full day
     if (timeOfDay >= 5 && timeOfDay < 7) return (timeOfDay - 5) / 2;  // dawn fade in
-    if (timeOfDay > 17 && timeOfDay <= 19) return 1 - (timeOfDay - 17) / 2; // dusk fade out
+    if (timeOfDay > 17 && timeOfDay <= 21) return 1 - (timeOfDay - 17) / 4; // dusk fade out over 4 hours
     return 0;  // night
   }, [timeOfDay]);
 
@@ -410,10 +410,7 @@ function Scene({ timeOfDay }) {
 }
 
 export default function OceanScene() {
-  const [timeOfDay, setTimeOfDay] = useState(() => {
-    const now = new Date();
-    return Math.round((now.getHours() + now.getMinutes() / 60) * 20) / 20;
-  });
+  const [timeOfDay, setTimeOfDay] = useState(17); // Start at 5:00 PM
 
   return (
     <div className="ocean-canvas">
