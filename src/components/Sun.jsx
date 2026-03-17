@@ -38,7 +38,8 @@ export default function Sun({ timeOfDay }) {
     if (timeOfDay < 5) colorHex = '#FF4444'; // Red
     else if (timeOfDay < 9) colorHex = '#FF8844'; // Orange (dawn golden hour)
     else if (timeOfDay < 16) colorHex = '#FFFFFF'; // White
-    else if (timeOfDay < 19) colorHex = '#FF8844'; // Orange (dusk golden hour)
+    else if (timeOfDay < 17.5) colorHex = '#FF8844'; // Orange (early dusk)
+    else if (timeOfDay < 19) colorHex = '#FF5533'; // Red (deep dusk)
     else colorHex = '#FF4444'; // Red
     return new THREE.Color(colorHex);
   }, [timeOfDay]);
