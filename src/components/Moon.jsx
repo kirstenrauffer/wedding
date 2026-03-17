@@ -1,5 +1,7 @@
 import { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
+import { useControls, folder } from 'leva';
+import { SOLAR } from '../utils/solar';
 
 const MOON_VERTEX = /* glsl */ `
   varying vec3 vNormal;
@@ -18,6 +20,7 @@ const MOON_VERTEX = /* glsl */ `
 const MOON_FRAGMENT = /* glsl */ `
   uniform sampler2D moonTexture;
   uniform float moonOpacity;
+  uniform vec3 moonLightDir;
 
   varying vec3 vNormal;
   varying vec3 vViewDir;
@@ -27,8 +30,8 @@ const MOON_FRAGMENT = /* glsl */ `
     // Sample crater texture
     vec3 textureColor = texture2D(moonTexture, vUv).rgb;
 
-    // Strong directional lighting
-    vec3 lightDir = normalize(vec3(0.3, 0.5, 0.2));
+    // Strong directional lighting from dynamic light direction
+    vec3 lightDir = normalize(moonLightDir);
     float diffuse = max(0.15, dot(vNormal, lightDir));
 
     // Rim lighting for depth
@@ -94,7 +97,16 @@ export default function Moon({ timeOfDay = 12 }) {
   const materialRef = useRef();
 
   // Moon position: in the sky, visible from camera
-  const moonPosition = new THREE.Vector3(20, 45, -80);
+  const moonPosition = new THREE.Vector3(45, 45, -80);
+
+  // Read light direction from Leva (solar system)
+  const { lightX, lightY, lightZ } = useControls({
+    'Time of Day': folder({
+      lightX: { value: SOLAR.lightX, render: () => false },
+      lightY: { value: SOLAR.lightY, render: () => false },
+      lightZ: { value: SOLAR.lightZ, render: () => false },
+    }),
+  });
 
   // Create crater texture once
   const craterTexture = useMemo(() => createMoonTexture(), []);
@@ -103,18 +115,20 @@ export default function Moon({ timeOfDay = 12 }) {
   const uniforms = useMemo(() => ({
     moonTexture: { value: craterTexture },
     moonOpacity: { value: 1.0 },
+    moonLightDir: { value: new THREE.Vector3(0.3, 0.5, 0.2) },
   }), [craterTexture]);
 
   // Calculate opacity based on time of day
   const moonOpacity = useMemo(() => calculateMoonOpacity(timeOfDay), [timeOfDay]);
 
-  // Update uniform value when opacity changes
+  // Update uniform values when opacity or light direction changes
   useEffect(() => {
     uniforms.moonOpacity.value = moonOpacity;
-  }, [moonOpacity, uniforms]);
+    uniforms.moonLightDir.value.set(lightX, lightY, lightZ).normalize();
+  }, [moonOpacity, lightX, lightY, lightZ, uniforms]);
 
   return (
-    <mesh ref={meshRef} position={moonPosition} scale={5}>
+    <mesh ref={meshRef} position={moonPosition} scale={3.75}>
       <sphereGeometry args={[1, 128, 64]} />
       <shaderMaterial
         ref={materialRef}

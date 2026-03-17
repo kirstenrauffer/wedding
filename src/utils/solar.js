@@ -79,19 +79,19 @@ export function computeSolarParams(hours) {
   const nightMid = '#152238';
   const nightHorizon = '#1A2A40';
 
-  const dayTop = '#1E5B8E';
-  const dayMid = '#4A90C4';
-  const dayHorizon = '#82bbe2';
+  const dayTop = '#0D3D7A';
+  const dayMid = '#2E7EC4';
+  const dayHorizon = '#6BACE8';
 
   // Sunrise palette — soft pinks, lavender, warm peach (Kiki's dawn over the ocean)
-  const sunriseTop = '#4A3A6E';     // dusky lavender-blue
-  const sunriseMid = '#C4788E';     // soft rose-pink
-  const sunriseHorizon = '#E8A880'; // warm peach-apricot
+  const sunriseTop = '#3A2A5E';     // dusky lavender-blue
+  const sunriseMid = '#E88FA8';     // vibrant rose-pink
+  const sunriseHorizon = '#FFB89A'; // intense warm peach-apricot
 
   // Sunset palette — deeper pinks, coral, magenta (Kiki's iconic sunset flight)
-  const sunsetTop = '#5A3060';      // deep magenta-purple
-  const sunsetMid = '#D06878';      // rich coral-pink
-  const sunsetHorizon = '#E8906A';  // warm salmon-orange
+  const sunsetTop = '#4A2050';      // deep magenta-purple
+  const sunsetMid = '#E87878';      // vivid coral-pink
+  const sunsetHorizon = '#FFB370';  // intense warm salmon-orange
 
   // Blend night → day based on dayFactor
   let skyTopHex = lerpHex(nightTop, dayTop, dayFactor);
@@ -114,9 +114,29 @@ export function computeSolarParams(hours) {
 
   // ── Lighting intensities ──
   const ambientIntensity =
-    Math.round(lerp(0.03, lerp(0.10, 0.22, elevation), dayFactor) * 100) / 100;
-  const directionalIntensity =
-    Math.round(lerp(0.03, lerp(0.35, 0.8, elevation), dayFactor) * 10) / 10;
+    Math.round(lerp(0.1, lerp(0.25, 0.5, elevation), dayFactor) * 100) / 100;
+  const directionalIntensity = isDaytime
+    ? Math.round(lerp(0.1, lerp(1.5, 3.0, elevation), dayFactor) * 10) / 10
+    : 0.5; // Fixed sunset intensity throughout night
+
+  // At night, use the frozen sunset lighting from 18.75 instead of the computed sun position
+  let finalLightX = lightX;
+  let finalLightY = lightY;
+  let finalSunColorHex = sunColorHex;
+
+  if (!isDaytime) {
+    // Compute what the sunset params would be at 18.75 (without full recursion)
+    const sunsetHour = 18.75;
+    const sunsetProgress = (sunsetHour - SUNRISE) / (SUNSET - SUNRISE);
+    const sunsetSolarAngle = sunsetProgress * Math.PI;
+    const sunsetElevation = Math.sin(sunsetSolarAngle);
+    const sunsetEastWest = Math.cos(sunsetSolarAngle);
+
+    finalLightX = Math.round(sunsetEastWest * 200);
+    finalLightY = Math.round(sunsetElevation * 300);
+    // Use a warm sunset tone for night
+    finalSunColorHex = '#FF8C42'; // dusk golden
+  }
 
   // ── Cloud colors ──
   // Day: bright white. Night: dark gray-blue. Golden: warm cream.
@@ -142,11 +162,31 @@ export function computeSolarParams(hours) {
     shadowColorHex = lerpHex(shadowColorHex, sunsetShadow, duskGolden * 0.45);
   }
 
+  // ── Fog ──
+  // Fog color matches horizon, varies based on time of day
+  // Shorter range at night for moodier atmosphere; longer at day
+  // Near: 80-150m, Far: 2500-5500m with time-of-day variation
+  const fogNear = isDaytime ? 100 : 80;
+  const fogFar = isDaytime
+    ? 4000 + 1500 * Math.max(0, elevation) // brighter days see farther
+    : 1800 + 500 * Math.max(0, dayFactor);  // nights are hazier
+  const fogColor = skyHorizonHex;
+
+  // ── Moon lighting (night only) ──
+  // Moon fades in at 17:00-19:00, visible through night, fades out 5:00-7:00
+  const moonRiseFactor = smoothstep(17, 19, hours);
+  const moonFallFactor = 1 - smoothstep(5, 7, hours);
+  const moonNightFactor = moonRiseFactor * moonFallFactor;
+
+  const moonLightIntensity = Math.round(moonNightFactor * 0.35 * 100) / 100;
+  const moonAmbientIntensity = Math.round(moonNightFactor * 0.12 * 100) / 100;
+  const moonColorHex = '#c8d8f0'; // cool silver-blue
+
   return {
-    lightX,
-    lightY,
+    lightX: finalLightX,
+    lightY: finalLightY,
     lightZ,
-    sunColorHex,
+    sunColorHex: finalSunColorHex,
     skyTopHex,
     skyMidHex,
     skyHorizonHex,
@@ -154,6 +194,12 @@ export function computeSolarParams(hours) {
     shadowColorHex,
     ambientIntensity,
     directionalIntensity,
+    fogColor,
+    fogNear,
+    fogFar,
+    moonLightIntensity,
+    moonAmbientIntensity,
+    moonColorHex,
   };
 }
 

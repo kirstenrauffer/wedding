@@ -24,7 +24,8 @@ const SUN_FRAGMENT = /* glsl */ `
     vec3 viewDir = normalize(vViewDir);
     float facing = dot(vNormal, viewDir);
     if (facing < 0.0) discard;
-    gl_FragColor = vec4(sunColor * 1.5, 1.0);
+    // Extremely bright sun to trigger bloom threshold
+    gl_FragColor = vec4(sunColor * 5.0, 1.0);
   }
 `;
 
@@ -38,13 +39,13 @@ export default function Sun() {
     }),
   });
 
-  // Calculate sun color based on timeOfDay
+  // Calculate sun color based on timeOfDay (synced with sky's golden hour in solar.js)
   const sunColor = useMemo(() => {
     let colorHex;
-    if (timeOfDay < 6.5) colorHex = '#FF4444'; // Red
-    else if (timeOfDay < 9) colorHex = '#FF8844'; // Orange
-    else if (timeOfDay < 15) colorHex = '#FFFFFF'; // White
-    else if (timeOfDay < 18) colorHex = '#FF8844'; // Orange
+    if (timeOfDay < 5) colorHex = '#FF4444'; // Red
+    else if (timeOfDay < 9) colorHex = '#FF8844'; // Orange (dawn golden hour)
+    else if (timeOfDay < 16) colorHex = '#FFFFFF'; // White
+    else if (timeOfDay < 19) colorHex = '#FF8844'; // Orange (dusk golden hour)
     else colorHex = '#FF4444'; // Red
     return new THREE.Color(colorHex);
   }, [timeOfDay]);

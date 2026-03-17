@@ -43,12 +43,12 @@ function milkyWayDensity(dir) {
 // ─── Star colour palette (stellar temperature distribution) ───────────────────
 
 const PALETTE = [
-  { color: new THREE.Color('#D0E8FF'), weight: 0.12 }, // hot blue-white
-  { color: new THREE.Color('#FFFFFF'), weight: 0.38 }, // white
-  { color: new THREE.Color('#FFF9F0'), weight: 0.25 }, // warm white
-  { color: new THREE.Color('#FFE8A0'), weight: 0.15 }, // yellow-white
-  { color: new THREE.Color('#FFCC77'), weight: 0.07 }, // yellow-orange
-  { color: new THREE.Color('#FF9955'), weight: 0.03 }, // orange-red
+  { color: new THREE.Color('#E8F0F8'), weight: 0.12 }, // subtle cool blue
+  { color: new THREE.Color('#F5F5F5'), weight: 0.38 }, // off-white
+  { color: new THREE.Color('#F8F5F0'), weight: 0.25 }, // subtle warm white
+  { color: new THREE.Color('#F5EFE5'), weight: 0.15 }, // pale yellow
+  { color: new THREE.Color('#F0E6D8'), weight: 0.07 }, // soft yellow
+  { color: new THREE.Color('#EDD8CC'), weight: 0.03 }, // light warm
 ];
 
 const CUM_WEIGHTS = (() => {
