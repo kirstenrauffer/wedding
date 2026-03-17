@@ -21,6 +21,7 @@ const MOON_FRAGMENT = /* glsl */ `
   uniform sampler2D moonTexture;
   uniform float moonOpacity;
   uniform vec3 moonLightDir;
+  uniform vec3 moonTint;
 
   varying vec3 vNormal;
   varying vec3 vViewDir;
@@ -39,6 +40,9 @@ const MOON_FRAGMENT = /* glsl */ `
 
     // Combine texture with lighting (preserves crater detail)
     vec3 lit = textureColor * (diffuse + 0.5) + rim;
+
+    // Apply sunset tint
+    lit = mix(lit, lit * moonTint, 0.6);
 
     gl_FragColor = vec4(lit, moonOpacity);
   }
@@ -60,6 +64,20 @@ function calculateMoonOpacity(hour) {
   }
   // Nighttime: fully visible (including 0:00–5:00)
   return 1.0;
+}
+
+// Calculate moon tint based on time of day
+function calculateMoonTint(hour) {
+  // Red tint during sunset (17:00-19:00)
+  if (hour >= 17 && hour < 19) {
+    // Peak red intensity around 18:00 (midpoint)
+    const sunsetProgress = (hour - 17) / 2.0;
+    const tintIntensity = Math.sin(sunsetProgress * Math.PI) * 0.8; // peak at 0.8
+    // Blend from white (1,1,1) to red (1,0.4,0.2)
+    return new THREE.Color(1, 1, 1).lerp(new THREE.Color(1, 0.4, 0.2), tintIntensity);
+  }
+  // Default white (no tint)
+  return new THREE.Color(1, 1, 1);
 }
 
 // Create moon texture with detailed craters
@@ -224,16 +242,19 @@ export default function Moon({ timeOfDay = 12 }) {
     moonTexture: { value: craterTexture },
     moonOpacity: { value: 1.0 },
     moonLightDir: { value: new THREE.Vector3(0.3, 0.5, 0.2) },
+    moonTint: { value: new THREE.Color(1, 1, 1) },
   }), [craterTexture]);
 
-  // Calculate opacity based on time of day
+  // Calculate opacity and tint based on time of day
   const moonOpacity = useMemo(() => calculateMoonOpacity(timeOfDay), [timeOfDay]);
+  const moonTint = useMemo(() => calculateMoonTint(timeOfDay), [timeOfDay]);
 
-  // Update uniform values when opacity or light direction changes
+  // Update uniform values when opacity, tint, or light direction changes
   useEffect(() => {
     uniforms.moonOpacity.value = moonOpacity;
+    uniforms.moonTint.value.copy(moonTint);
     uniforms.moonLightDir.value.set(lightX, lightY, lightZ).normalize();
-  }, [moonOpacity, lightX, lightY, lightZ, uniforms]);
+  }, [moonOpacity, moonTint, lightX, lightY, lightZ, uniforms]);
 
   return (
     <mesh ref={meshRef} position={moonPosition} scale={3.75}>

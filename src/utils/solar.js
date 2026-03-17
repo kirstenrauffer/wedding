@@ -96,13 +96,13 @@ export function computeSolarParams(hours) {
 
   // Sunrise palette — soft pinks, lavender, warm peach (Kiki's dawn over the ocean)
   const sunriseTop = '#3A2A5E';     // dusky lavender-blue
-  const sunriseMid = '#E88FA8';     // vibrant rose-pink
-  const sunriseHorizon = '#FFB89A'; // intense warm peach-apricot
+  const sunriseMid = '#FF6B9D';     // vibrant rose-pink
+  const sunriseHorizon = '#FFAA77'; // intense warm peach-apricot
 
   // Sunset palette — deeper pinks, coral, magenta (Kiki's iconic sunset flight)
   const sunsetTop = '#4A2050';      // deep magenta-purple
-  const sunsetMid = '#E87878';      // vivid coral-pink
-  const sunsetHorizon = '#FFB370';  // intense warm salmon-orange
+  const sunsetMid = '#FF5555';      // vivid coral-pink
+  const sunsetHorizon = '#FFA035';  // intense warm salmon-orange
 
   // Blend night → day based on dayFactor
   let skyTopHex = lerpHex(nightTop, dayTop, dayFactor);
@@ -111,16 +111,16 @@ export function computeSolarParams(hours) {
 
   // Layer in sunrise warmth during dawn golden hour
   if (dawnGolden > 0) {
-    skyTopHex = lerpHex(skyTopHex, sunriseTop, dawnGolden * 0.6);
-    skyMidHex = lerpHex(skyMidHex, sunriseMid, dawnGolden * 0.55);
-    skyHorizonHex = lerpHex(skyHorizonHex, sunriseHorizon, dawnGolden * 0.7);
+    skyTopHex = lerpHex(skyTopHex, sunriseTop, dawnGolden * 0.9);
+    skyMidHex = lerpHex(skyMidHex, sunriseMid, dawnGolden * 0.83);
+    skyHorizonHex = lerpHex(skyHorizonHex, sunriseHorizon, dawnGolden * 1.0);
   }
 
   // Layer in sunset warmth during dusk golden hour
   if (duskGolden > 0) {
-    skyTopHex = lerpHex(skyTopHex, sunsetTop, duskGolden * 0.65);
-    skyMidHex = lerpHex(skyMidHex, sunsetMid, duskGolden * 0.6);
-    skyHorizonHex = lerpHex(skyHorizonHex, sunsetHorizon, duskGolden * 0.75);
+    skyTopHex = lerpHex(skyTopHex, sunsetTop, duskGolden * 0.98);
+    skyMidHex = lerpHex(skyMidHex, sunsetMid, duskGolden * 0.9);
+    skyHorizonHex = lerpHex(skyHorizonHex, sunsetHorizon, duskGolden * 1.0);
   }
 
   // ── Lighting intensities ──
@@ -157,10 +157,10 @@ export function computeSolarParams(hours) {
   const dayCloud = '#FFFFFF';
   const nightCloud = '#263040';
   const moonlitCloud = '#3A4A5C';    // subtle blue-gray under moonlight
-  const sunriseCloud = '#E8C0B0';   // warm pink-cream clouds at dawn
-  const sunsetCloud = '#E8A890';    // coral-tinged clouds at dusk
-  const sunriseShadow = '#8A5A60';  // dusty rose shadow
-  const sunsetShadow = '#7A4040';   // deep warm shadow
+  const sunriseCloud = '#F5A890';   // warm pink-cream clouds at dawn
+  const sunsetCloud = '#F58860';    // coral-tinged clouds at dusk
+  const sunriseShadow = '#A83860';  // dusty rose shadow
+  const sunsetShadow = '#A82020';   // deep warm shadow
 
   const dayShadow = '#7A8EA0';
   const nightShadow = '#0D1520';
@@ -170,12 +170,12 @@ export function computeSolarParams(hours) {
   let shadowColorHex = lerpHex(nightShadow, dayShadow, dayFactor);
 
   if (dawnGolden > 0) {
-    cloudColorHex = lerpHex(cloudColorHex, sunriseCloud, dawnGolden * 0.5);
-    shadowColorHex = lerpHex(shadowColorHex, sunriseShadow, dawnGolden * 0.4);
+    cloudColorHex = lerpHex(cloudColorHex, sunriseCloud, dawnGolden * 0.75);
+    shadowColorHex = lerpHex(shadowColorHex, sunriseShadow, dawnGolden * 0.6);
   }
   if (duskGolden > 0) {
-    cloudColorHex = lerpHex(cloudColorHex, sunsetCloud, duskGolden * 0.55);
-    shadowColorHex = lerpHex(shadowColorHex, sunsetShadow, duskGolden * 0.45);
+    cloudColorHex = lerpHex(cloudColorHex, sunsetCloud, duskGolden * 0.83);
+    shadowColorHex = lerpHex(shadowColorHex, sunsetShadow, duskGolden * 0.68);
   }
   // Layer in moonlit tint when moon is visible at night
   if (moonNightFactor > 0 && dayFactor < 0.3) {

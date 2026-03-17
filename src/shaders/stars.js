@@ -9,7 +9,7 @@
 export const STAR_CONFIG = {
   bgCount: 6000,
   brightCount: 140,
-  brightness: 1.6,
+  brightness: 0.8,
 };
 
 export const STAR_VERT = /* glsl */ `
