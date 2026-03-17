@@ -134,8 +134,8 @@ export function computeSolarParams(hours) {
 
     finalLightX = Math.round(sunsetEastWest * 200);
     finalLightY = Math.round(sunsetElevation * 300);
-    // Use a warm sunset tone for night
-    finalSunColorHex = '#FF8C42'; // dusk golden
+    // Use white tone for night
+    finalSunColorHex = '#FFFFFF';
   }
 
   // ── Cloud colors ──

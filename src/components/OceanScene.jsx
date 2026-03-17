@@ -87,6 +87,11 @@ function OceanWater() {
     return base.multiplyScalar(nightFactor);
   }, [sunColorHex, nightFactor]);
 
+  // Reduce water distortion (reflections) at night
+  const waterDistortion = useMemo(() => {
+    return 3.7 * nightFactor + 2.0 * (1 - nightFactor); // 3.7 day, 2.0 night
+  }, [nightFactor]);
+
   const water = useMemo(() => {
     const geom = new THREE.PlaneGeometry(30000, 30000);
     const w = new Water(geom, {
@@ -96,13 +101,13 @@ function OceanWater() {
       sunDirection: waterSunDirection,
       sunColor: waterSunColor,
       waterColor: new THREE.Color(waterColorHex),
-      distortionScale: 3.7,
+      distortionScale: waterDistortion,
       fog: true,
       alpha: 1.0,
     });
     w.rotation.x = -Math.PI / 2;
     return w;
-  }, [waterNormals, waterSunDirection, waterSunColor, waterColorHex]);
+  }, [waterNormals, waterSunDirection, waterSunColor, waterColorHex, waterDistortion]);
 
   useEffect(() => {
     water.material.uniforms.sunColor.value.copy(waterSunColor);
@@ -195,24 +200,41 @@ function GradientSky() {
 const KuwaharaComponent = wrapEffect(KuwaharaEffect);
 
 function PostProcessing() {
-  // Kuwahara effect settings (hardcoded, no UI controls)
-  const kuwaharaEnabled = true;
-  const kuwaharaRadius = 3.5;
-  const kuwaharaSharpness = 4.0;
-
-  // Hardcoded post-processing settings (no UI controls)
-  const bloomEnabled = true;
-  const bloomIntensity = 0.4;
-  const bloomThreshold = 0.9;
-  const bloomSmoothing = 0.6;
-  const dofEnabled = true;
-  const dofFocusDistance = 0.01;
-  const dofFocalLength = 0.02;
-  const dofBokehScale = 2.0;
-  const aoEnabled = true;
-  const aoIntensity = 1.0;
-  const vignetteEnabled = true;
-  const vignetteIntensity = 0.9;
+  const {
+    kuwaharaEnabled,
+    kuwaharaRadius,
+    kuwaharaSharpness,
+    bloomEnabled,
+    bloomIntensity,
+    bloomThreshold,
+    bloomSmoothing,
+    dofEnabled,
+    dofFocusDistance,
+    dofFocalLength,
+    dofBokehScale,
+    aoEnabled,
+    aoIntensity,
+    vignetteEnabled,
+    vignetteIntensity,
+  } = useControls({
+    'Post Processing': folder({
+      kuwaharaEnabled: true,
+      kuwaharaRadius: { value: 3.5, min: 0.5, max: 10, step: 0.1 },
+      kuwaharaSharpness: { value: 4.0, min: 0.5, max: 10, step: 0.1 },
+      bloomEnabled: true,
+      bloomIntensity: { value: 0.4, min: 0, max: 2, step: 0.1 },
+      bloomThreshold: { value: 0.9, min: 0, max: 1, step: 0.05 },
+      bloomSmoothing: { value: 0.6, min: 0, max: 1, step: 0.05 },
+      dofEnabled: true,
+      dofFocusDistance: { value: 0.01, min: 0, max: 1, step: 0.01 },
+      dofFocalLength: { value: 0.02, min: 0, max: 1, step: 0.01 },
+      dofBokehScale: { value: 2.0, min: 0.5, max: 10, step: 0.5 },
+      aoEnabled: true,
+      aoIntensity: { value: 1.0, min: 0, max: 2, step: 0.1 },
+      vignetteEnabled: true,
+      vignetteIntensity: { value: 0.9, min: 0, max: 2, step: 0.1 },
+    }),
+  });
 
   return (
     <EffectComposer multisampling={8}>

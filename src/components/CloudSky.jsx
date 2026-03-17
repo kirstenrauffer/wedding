@@ -295,18 +295,18 @@ const CLOUD_FRAGMENT = /* glsl */ `
         float densityFraction = smoothstep(0.0, 0.4, density);
 
         // Three-color blend: shadow2 (darkest) → shadow1 → core (lightest)
-        vec3 coreColor = mix(cloudColor, vec3(1.0), dayThreshold * 0.8);
-        vec3 midColor = mix(cloudColor * 0.85, vec3(0.9), dayThreshold * 0.7);
-        vec3 darkColor = mix(cloudShadowColor2, vec3(0.7), dayThreshold * 0.4);
+        vec3 coreColor = mix(cloudColor, vec3(1.0), dayThreshold);
+        vec3 midColor = mix(cloudColor * 0.9, vec3(1.0), dayThreshold * 0.9);
+        vec3 darkColor = mix(cloudShadowColor2, vec3(0.95), dayThreshold * 0.85);
 
         // Blend between shadow colors and core based on density
         vec3 baseColor = mix(darkColor, coreColor, densityFraction);
         baseColor = mix(baseColor, midColor, smoothstep(0.0, 0.5, densityFraction) * 0.5);
 
         // Combine with lighting
-        vec3 ambientColor = mix(cloudShadowColor, vec3(1.0), dayThreshold * 0.6);
-        vec3 ambient = ambientColor * 0.4;
-        vec3 sunLit = sunColor * sunIllum * 0.9;
+        vec3 ambientColor = mix(cloudShadowColor, vec3(1.0), dayThreshold * 0.8);
+        vec3 ambient = ambientColor * 0.6;
+        vec3 sunLit = sunColor * sunIllum * 1.3;
 
         vec3 luminance = (sunLit + ambient) * baseColor;
 
@@ -387,11 +387,11 @@ export default function CloudSky() {
   });
 
   // Cloud parameters (locked - do not modify)
-  const coverage = 0.32;
-  const fluffiness = 0.27;
-  const cloudScale = 0.8;
+  const coverage = 0.30;
+  const fluffiness = 0.55;
+  const cloudScale = 0.5;
   const cloudSpeed = 0.3;
-  const cloudDensity = 0.5;
+  const cloudDensity = 0.25;
   const lightAbsorption = 0.6;
   const absorptionScale = 0.045;
   const base = -200;
@@ -552,9 +552,6 @@ export default function CloudSky() {
         side={THREE.BackSide}
         transparent
         depthWrite={false}
-        blending={THREE.CustomBlending}
-        blendSrc={THREE.OneFactor}
-        blendDst={THREE.OneMinusSrcAlphaFactor}
         uniforms={uniforms}
       />
     </mesh>
