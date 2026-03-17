@@ -118,7 +118,7 @@ export default function StarField() {
   // Share the Time of Day slider value managed by TimeOfDayController
   const { timeOfDay } = useControls({
     'Time of Day': folder({
-      timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, label: 'Hour (0–24)' },
+      timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, render: () => false },
     }),
   });
 

@@ -48,6 +48,17 @@ export function computeSolarParams(hours) {
   const dawnGolden = goldenHour * smoothstep(4.5, 6, hours) * (1 - smoothstep(7.5, 9, hours));
   const duskGolden = goldenHour * smoothstep(16, 17.5, hours) * (1 - smoothstep(19, 20, hours));
 
+  // ── Moon lighting factor ──
+  // Moon is fully visible during night (19:00–5:00), fades in 17:00–19:00, fades out 5:00–7:00
+  let moonNightFactor;
+  if (hours >= 19 || hours < 5) {
+    moonNightFactor = 1; // full night
+  } else if (hours >= 17) {
+    moonNightFactor = smoothstep(17, 19, hours); // fade in
+  } else {
+    moonNightFactor = 1 - smoothstep(5, 7, hours); // fade out
+  }
+
   // ── Light position ──
   const lightX = Math.round(eastWest * 200);
   const lightY = isDaytime
@@ -75,13 +86,13 @@ export function computeSolarParams(hours) {
   // Night:   deep navy → dark blue → dark horizon
   // Day:     rich blue → medium blue → light warm blue
   // Golden:  deep orange-blue → warm peach → golden horizon
-  const nightTop = '#0A1628';
-  const nightMid = '#152238';
-  const nightHorizon = '#1A2A40';
+  const nightTop = '#0C1223';
+  const nightMid = '#121929';
+  const nightHorizon = '#141E2D';
 
-  const dayTop = '#0D3D7A';
-  const dayMid = '#2E7EC4';
-  const dayHorizon = '#6BACE8';
+  const dayTop = '#1A3A70';
+  const dayMid = '#2A5FA8';
+  const dayHorizon = '#3A7AC8';
 
   // Sunrise palette — soft pinks, lavender, warm peach (Kiki's dawn over the ocean)
   const sunriseTop = '#3A2A5E';     // dusky lavender-blue
@@ -117,12 +128,14 @@ export function computeSolarParams(hours) {
     Math.round(lerp(0.1, lerp(0.25, 0.5, elevation), dayFactor) * 100) / 100;
   const directionalIntensity = isDaytime
     ? Math.round(lerp(0.1, lerp(1.5, 3.0, elevation), dayFactor) * 10) / 10
-    : 0.5; // Fixed sunset intensity throughout night
+    : 0; // Sun light off when sun is not visible; moon light takes over
 
   // At night, use the frozen sunset lighting from 18.75 instead of the computed sun position
   let finalLightX = lightX;
   let finalLightY = lightY;
   let finalSunColorHex = sunColorHex;
+
+  let finalElevation = elevation;
 
   if (!isDaytime) {
     // Compute what the sunset params would be at 18.75 (without full recursion)
@@ -134,14 +147,16 @@ export function computeSolarParams(hours) {
 
     finalLightX = Math.round(sunsetEastWest * 200);
     finalLightY = Math.round(sunsetElevation * 300);
+    finalElevation = sunsetElevation;
     // Use white tone for night
     finalSunColorHex = '#FFFFFF';
   }
 
   // ── Cloud colors ──
-  // Day: bright white. Night: dark gray-blue. Golden: warm cream.
+  // Day: bright white. Night: dark gray-blue. Golden: warm cream. Moonlit: subtle blue-gray.
   const dayCloud = '#FFFFFF';
   const nightCloud = '#263040';
+  const moonlitCloud = '#3A4A5C';    // subtle blue-gray under moonlight
   const sunriseCloud = '#E8C0B0';   // warm pink-cream clouds at dawn
   const sunsetCloud = '#E8A890';    // coral-tinged clouds at dusk
   const sunriseShadow = '#8A5A60';  // dusty rose shadow
@@ -149,6 +164,7 @@ export function computeSolarParams(hours) {
 
   const dayShadow = '#7A8EA0';
   const nightShadow = '#0D1520';
+  const moonlitShadow = '#1A2B3A';   // subtle shadow under moonlight
 
   let cloudColorHex = lerpHex(nightCloud, dayCloud, dayFactor);
   let shadowColorHex = lerpHex(nightShadow, dayShadow, dayFactor);
@@ -161,6 +177,11 @@ export function computeSolarParams(hours) {
     cloudColorHex = lerpHex(cloudColorHex, sunsetCloud, duskGolden * 0.55);
     shadowColorHex = lerpHex(shadowColorHex, sunsetShadow, duskGolden * 0.45);
   }
+  // Layer in moonlit tint when moon is visible at night
+  if (moonNightFactor > 0 && dayFactor < 0.3) {
+    cloudColorHex = lerpHex(cloudColorHex, moonlitCloud, moonNightFactor * 0.4);
+    shadowColorHex = lerpHex(shadowColorHex, moonlitShadow, moonNightFactor * 0.3);
+  }
 
   // ── Fog ──
   // Fog color matches horizon, varies based on time of day
@@ -172,12 +193,7 @@ export function computeSolarParams(hours) {
     : 1800 + 500 * Math.max(0, dayFactor);  // nights are hazier
   const fogColor = skyHorizonHex;
 
-  // ── Moon lighting (night only) ──
-  // Moon fades in at 17:00-19:00, visible through night, fades out 5:00-7:00
-  const moonRiseFactor = smoothstep(17, 19, hours);
-  const moonFallFactor = 1 - smoothstep(5, 7, hours);
-  const moonNightFactor = moonRiseFactor * moonFallFactor;
-
+  // ── Moon light intensity ──
   const moonLightIntensity = Math.round(moonNightFactor * 0.35 * 100) / 100;
   const moonAmbientIntensity = Math.round(moonNightFactor * 0.12 * 100) / 100;
   const moonColorHex = '#c8d8f0'; // cool silver-blue
@@ -187,6 +203,7 @@ export function computeSolarParams(hours) {
     lightY: finalLightY,
     lightZ,
     sunColorHex: finalSunColorHex,
+    elevation: finalElevation,
     skyTopHex,
     skyMidHex,
     skyHorizonHex,

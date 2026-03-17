@@ -366,7 +366,7 @@ export default function CloudSky() {
   const _cameraDir = useMemo(() => new THREE.Vector3(), []);
 
   // Share light and time controls with other scene components
-  const { lightX, lightY, lightZ, sunColorHex, cloudColorHex, shadowColorHex, timeOfDay, fogColor, fogNear, fogFar, lensFlarePositionH, lensFlarePositionV, moonLightIntensity, moonColorHex } = useControls({
+  const { lightX, lightY, lightZ, sunColorHex, cloudColorHex, shadowColorHex, timeOfDay, fogColor, fogNear, fogFar, moonLightIntensity, moonColorHex } = useControls({
     'Time of Day': folder({
       timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, render: () => false },
       lightX: { value: SOLAR.lightX, render: () => false },
@@ -380,11 +380,12 @@ export default function CloudSky() {
       fogFar: { value: SOLAR.fogFar, render: () => false },
       moonLightIntensity: { value: SOLAR.moonLightIntensity, render: () => false },
       moonColorHex: { value: SOLAR.moonColorHex, render: () => false },
-      lensFlareIntensity: { value: 0.7, min: 0, max: 2, step: 0.1, label: 'Lens Flare Intensity' },
-      lensFlarePositionH: { value: 1, min: 0, max: 2, step: 0.1, label: 'Lens Flare H' },
-      lensFlarePositionV: { value: 1, min: 0, max: 2, step: 0.1, label: 'Lens Flare V' },
     }),
   });
+
+  // Hardcoded lens flare position (previously exposed in Leva)
+  const lensFlarePositionH = 1;
+  const lensFlarePositionV = 1;
 
   // Cloud parameters (locked - do not modify)
   const coverage = 0.30;
@@ -552,6 +553,9 @@ export default function CloudSky() {
         side={THREE.BackSide}
         transparent
         depthWrite={false}
+        blending={THREE.CustomBlending}
+        blendSrc={THREE.OneFactor}
+        blendDst={THREE.OneMinusSrcAlphaFactor}
         uniforms={uniforms}
       />
     </mesh>

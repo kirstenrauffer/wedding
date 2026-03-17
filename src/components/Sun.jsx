@@ -16,6 +16,7 @@ const SUN_VERTEX = /* glsl */ `
 
 const SUN_FRAGMENT = /* glsl */ `
   uniform vec3 sunColor;
+  uniform float sunBrightness;
 
   varying vec3 vNormal;
   varying vec3 vViewDir;
@@ -24,8 +25,8 @@ const SUN_FRAGMENT = /* glsl */ `
     vec3 viewDir = normalize(vViewDir);
     float facing = dot(vNormal, viewDir);
     if (facing < 0.0) discard;
-    // Extremely bright sun to trigger bloom threshold
-    gl_FragColor = vec4(sunColor * 5.0, 1.0);
+    // Brightness scaled by solar elevation (5x at horizon → 13x at noon)
+    gl_FragColor = vec4(sunColor * sunBrightness, 1.0);
   }
 `;
 
@@ -35,7 +36,7 @@ export default function Sun() {
   // Read timeOfDay from leva like Moon does
   const { timeOfDay } = useControls({
     'Time of Day': folder({
-      timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, label: 'Hour (0–24)' },
+      timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, render: () => false },
     }),
   });
 
@@ -53,12 +54,25 @@ export default function Sun() {
   // Create uniforms once, mutate in-place when sunColor changes
   const uniforms = useMemo(() => ({
     sunColor: { value: new THREE.Color() },
+    sunBrightness: { value: 5.0 },
   }), []);
 
-  // Update uniform value when sunColor changes
+  // Compute solar elevation and brightness
+  const elevation = useMemo(() => {
+    const progress = Math.max(0, Math.min(1, (timeOfDay - 6) / 12));
+    const solarAngle = progress * Math.PI;
+    return Math.sin(solarAngle);
+  }, [timeOfDay]);
+
+  const sunBrightness = useMemo(() => {
+    return 5.0 + elevation * 8.0; // 5x at horizon → 13x at noon
+  }, [elevation]);
+
+  // Update uniform values
   useEffect(() => {
     uniforms.sunColor.value.copy(sunColor);
-  }, [sunColor, uniforms]);
+    uniforms.sunBrightness.value = sunBrightness;
+  }, [sunColor, sunBrightness, uniforms]);
 
   // Sun position based on time of day
   const sunPosition = useMemo(() => {

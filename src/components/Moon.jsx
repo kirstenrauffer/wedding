@@ -62,7 +62,7 @@ function calculateMoonOpacity(hour) {
   return 1.0;
 }
 
-// Create moon texture with craters
+// Create moon texture with detailed craters
 function createMoonTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
@@ -70,19 +70,127 @@ function createMoonTexture() {
   const ctx = canvas.getContext('2d');
 
   // Fill with base color
-  ctx.fillStyle = '#d0d0c8';
+  ctx.fillStyle = '#9c9c96';
   ctx.fillRect(0, 0, 512, 512);
 
-  // Add visible but stylized craters
-  for (let i = 0; i < 70; i++) {
+  // Add lunar maria (dark patches) before craters
+  const mariaCount = 4;
+  for (let i = 0; i < mariaCount; i++) {
     const x = Math.random() * 512;
     const y = Math.random() * 512;
-    const radius = Math.random() * 12 + 2;
+    const radius = Math.random() * 70 + 60;
 
-    ctx.fillStyle = `rgba(150, 150, 145, 0.4)`;
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+    grad.addColorStop(0, 'rgba(80, 80, 75, 0.4)');
+    grad.addColorStop(1, 'rgba(80, 80, 75, 0.0)');
+    ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  // Generate crater positions upfront for consistency
+  const craters = [];
+
+  // Small craters (75 total, radius 4.5–9px)
+  for (let i = 0; i < 75; i++) {
+    craters.push({
+      x: Math.random() * 512,
+      y: Math.random() * 512,
+      radius: Math.random() * 4.5 + 4.5,
+      size: 'small'
+    });
+  }
+
+  // Medium craters (22 total, radius 9–21px)
+  for (let i = 0; i < 22; i++) {
+    craters.push({
+      x: Math.random() * 512,
+      y: Math.random() * 512,
+      radius: Math.random() * 12 + 9,
+      size: 'medium'
+    });
+  }
+
+  // Large craters (8 total, radius 22.5–42px)
+  for (let i = 0; i < 8; i++) {
+    craters.push({
+      x: Math.random() * 512,
+      y: Math.random() * 512,
+      radius: Math.random() * 19.5 + 22.5,
+      size: 'large'
+    });
+  }
+
+  // Draw each crater with depth layers
+  craters.forEach(crater => {
+    const { x, y, radius, size } = crater;
+
+    if (size === 'small') {
+      // Small craters: dark center
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      grad.addColorStop(0, 'rgba(50, 50, 48, 1.0)');
+      grad.addColorStop(1, 'rgba(70, 70, 68, 0.4)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Medium and large: full crater with layers
+
+      // Ejecta halo (outermost)
+      const haloGrad = ctx.createRadialGradient(x, y, radius, x, y, radius * 1.8);
+      haloGrad.addColorStop(0, 'rgba(200, 200, 195, 0.5)');
+      haloGrad.addColorStop(1, 'rgba(200, 200, 195, 0.0)');
+      ctx.fillStyle = haloGrad;
+      ctx.beginPath();
+      ctx.arc(x, y, radius * 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bowl shadow (lower-right crescent) - larger
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.clip();
+      const shadowGrad = ctx.createLinearGradient(x - radius, y - radius, x + radius, y + radius);
+      shadowGrad.addColorStop(0, 'rgba(40, 40, 38, 0.0)');
+      shadowGrad.addColorStop(0.4, 'rgba(40, 40, 38, 0.9)');
+      shadowGrad.addColorStop(1, 'rgba(40, 40, 38, 0.1)');
+      ctx.fillStyle = shadowGrad;
+      ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+      ctx.restore();
+
+      // Rim highlight (upper-left crescent)
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.clip();
+      const rimGrad = ctx.createLinearGradient(x - radius, y - radius, x + radius, y + radius);
+      rimGrad.addColorStop(0, 'rgba(255, 255, 250, 0.9)');
+      rimGrad.addColorStop(0.5, 'rgba(255, 255, 250, 0.3)');
+      rimGrad.addColorStop(1, 'rgba(255, 255, 250, 0.0)');
+      ctx.fillStyle = rimGrad;
+      ctx.fillRect(x - radius, y - radius, radius * 2, radius);
+      ctx.restore();
+
+      // Crater floor (subtle bright center)
+      const floorGrad = ctx.createRadialGradient(x, y, 0, x, y, radius * 0.3);
+      floorGrad.addColorStop(0, 'rgba(160, 160, 155, 0.4)');
+      floorGrad.addColorStop(1, 'rgba(160, 160, 155, 0.0)');
+      ctx.fillStyle = floorGrad;
+      ctx.beginPath();
+      ctx.arc(x, y, radius * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+
+  // Add subtle surface noise to break up smoothness
+  for (let y = 0; y < 512; y += 8) {
+    for (let x = 0; x < 512; x += 8) {
+      const noise = Math.random() * 50 + 100; // 100–150 gray
+      ctx.fillStyle = `rgba(${noise}, ${noise}, ${noise}, 0.12)`;
+      ctx.fillRect(x, y, 8, 8);
+    }
   }
 
   const tex = new THREE.CanvasTexture(canvas);

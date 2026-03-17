@@ -24,19 +24,21 @@ import { KuwaharaEffect } from '../effects/KuwaharaEffect';
 // ─── Ocean Water Component ───
 
 function OceanWater() {
-  const { lightX, lightY, lightZ, sunColorHex, timeOfDay } = useControls({
+  const { lightX, lightY, lightZ, sunColorHex, timeOfDay, moonLightIntensity, moonColorHex } = useControls({
     'Time of Day': folder({
       lightX: { value: SOLAR.lightX, render: () => false },
       lightY: { value: SOLAR.lightY, render: () => false },
       lightZ: { value: SOLAR.lightZ, render: () => false },
       sunColorHex: { value: SOLAR.sunColorHex, render: () => false },
       timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, render: () => false },
+      moonLightIntensity: { value: SOLAR.moonLightIntensity, render: () => false },
+      moonColorHex: { value: SOLAR.moonColorHex, render: () => false },
     }),
   });
 
   // Compute water color based on time of day
   const waterColorHex = useMemo(() => {
-    const nightColor = '#1b2931';
+    const nightColor = '#0a191c';
     const dayColor = '#062a1f';
     const transitionColor = '#062429';
 
@@ -62,6 +64,9 @@ function OceanWater() {
     return tex;
   }, []);
 
+  // Check if sun is visible (6 AM to 6 PM)
+  const isSunVisible = timeOfDay >= 6 && timeOfDay <= 18;
+
   // Calculate night factor for smooth transition (0 = fully night, 1 = day)
   const nightFactor = useMemo(() => {
     if (timeOfDay >= 7 && timeOfDay <= 17) return 1;       // full day
@@ -81,15 +86,22 @@ function OceanWater() {
     return daytimeDir.clone().lerp(moonDir, 1 - nightFactor).normalize();
   }, [lightX, lightY, lightZ, nightFactor, moonDir]);
 
-  // Water reflection color: fades to black at night
+  // Water reflection color: moon shimmer at night, fades to sun during day
   const waterSunColor = useMemo(() => {
+    const moonColor = new THREE.Color(moonColorHex).multiplyScalar(moonLightIntensity * 1.5);
+    if (!isSunVisible) return moonColor;
     const base = new THREE.Color(sunColorHex);
-    return base.multiplyScalar(nightFactor);
-  }, [sunColorHex, nightFactor]);
+    return base.multiplyScalar(nightFactor).lerp(moonColor, 1 - nightFactor);
+  }, [sunColorHex, nightFactor, isSunVisible, moonColorHex, moonLightIntensity]);
 
   // Reduce water distortion (reflections) at night
   const waterDistortion = useMemo(() => {
     return 3.7 * nightFactor + 2.0 * (1 - nightFactor); // 3.7 day, 2.0 night
+  }, [nightFactor]);
+
+  // Scale reflection visibility based on time of day
+  const reflectionScale = useMemo(() => {
+    return 0.4 + nightFactor * 0.5; // 0.4 at night → 0.9 at day
   }, [nightFactor]);
 
   const water = useMemo(() => {
@@ -106,14 +118,36 @@ function OceanWater() {
       alpha: 1.0,
     });
     w.rotation.x = -Math.PI / 2;
+
+    // Reduce star reflection intensity by scaling the reflection texture contribution
+    w.material.onBeforeCompile = (shader) => {
+      shader.uniforms.uReflectionScale = { value: reflectionScale };
+
+      // Inject uniform and modify the albedo line to scale reflections
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'uniform vec3 waterColor;',
+        'uniform vec3 waterColor;\nuniform float uReflectionScale;'
+      );
+
+      // Target the exact line from Water.js where reflections are used:
+      // vec3 albedo = mix( ( sunColor * diffuseLight * 0.3 + scatter ) * getShadowMask(), reflectionSample + specularLight, reflectance );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'reflectionSample + specularLight, reflectance );',
+        '(reflectionSample * uReflectionScale) + specularLight, reflectance );'
+      );
+    };
+
     return w;
-  }, [waterNormals, waterSunDirection, waterSunColor, waterColorHex, waterDistortion]);
+  }, [waterNormals, waterSunDirection, waterSunColor, waterColorHex, waterDistortion, reflectionScale]);
 
   useEffect(() => {
     water.material.uniforms.sunColor.value.copy(waterSunColor);
     water.material.uniforms.sunDirection.value.copy(waterSunDirection);
     water.material.uniforms.waterColor.value.set(waterColorHex);
-  }, [water.material.uniforms, waterSunColor, waterSunDirection, waterColorHex]);
+    if (water.material.uniforms.uReflectionScale) {
+      water.material.uniforms.uReflectionScale.value = reflectionScale;
+    }
+  }, [water.material.uniforms, waterSunColor, waterSunDirection, waterColorHex, reflectionScale]);
 
   useFrame((_, delta) => {
     if (water.material.uniforms.time) {
@@ -200,41 +234,36 @@ function GradientSky() {
 const KuwaharaComponent = wrapEffect(KuwaharaEffect);
 
 function PostProcessing() {
-  const {
-    kuwaharaEnabled,
-    kuwaharaRadius,
-    kuwaharaSharpness,
-    bloomEnabled,
-    bloomIntensity,
-    bloomThreshold,
-    bloomSmoothing,
-    dofEnabled,
-    dofFocusDistance,
-    dofFocalLength,
-    dofBokehScale,
-    aoEnabled,
-    aoIntensity,
-    vignetteEnabled,
-    vignetteIntensity,
-  } = useControls({
-    'Post Processing': folder({
-      kuwaharaEnabled: true,
-      kuwaharaRadius: { value: 3.5, min: 0.5, max: 10, step: 0.1 },
-      kuwaharaSharpness: { value: 4.0, min: 0.5, max: 10, step: 0.1 },
-      bloomEnabled: true,
-      bloomIntensity: { value: 0.4, min: 0, max: 2, step: 0.1 },
-      bloomThreshold: { value: 0.9, min: 0, max: 1, step: 0.05 },
-      bloomSmoothing: { value: 0.6, min: 0, max: 1, step: 0.05 },
-      dofEnabled: true,
-      dofFocusDistance: { value: 0.01, min: 0, max: 1, step: 0.01 },
-      dofFocalLength: { value: 0.02, min: 0, max: 1, step: 0.01 },
-      dofBokehScale: { value: 2.0, min: 0.5, max: 10, step: 0.5 },
-      aoEnabled: true,
-      aoIntensity: { value: 1.0, min: 0, max: 2, step: 0.1 },
-      vignetteEnabled: true,
-      vignetteIntensity: { value: 0.9, min: 0, max: 2, step: 0.1 },
+  // Read timeOfDay for bloom intensity scaling
+  const { timeOfDay } = useControls({
+    'Time of Day': folder({
+      timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, render: () => false },
     }),
   });
+
+  // Compute solar elevation for bloom intensity scaling
+  const elevation = useMemo(() => {
+    const progress = Math.max(0, Math.min(1, (timeOfDay - 6) / 12));
+    const solarAngle = progress * Math.PI;
+    return Math.sin(solarAngle);
+  }, [timeOfDay]);
+
+  // Hardcoded post-processing settings (previously exposed in Leva)
+  const kuwaharaEnabled = true;
+  const kuwaharaRadius = 2.0;
+  const kuwaharaSharpness = 6.0;
+  const bloomEnabled = true;
+  const bloomIntensity = 0.4 + elevation * 0.5; // 0.4 at night/horizon → 0.9 at noon
+  const bloomThreshold = 0.9;
+  const bloomSmoothing = 0.6;
+  const dofEnabled = true;
+  const dofFocusDistance = 0.01;
+  const dofFocalLength = 0.02;
+  const dofBokehScale = 2.0;
+  const aoEnabled = true;
+  const aoIntensity = 1.0;
+  const vignetteEnabled = true;
+  const vignetteIntensity = 0.9;
 
   return (
     <EffectComposer multisampling={8}>
@@ -301,8 +330,8 @@ function SceneLighting() {
     }),
   });
 
-  // Moon light direction: from moon position (45, 45, -80)
-  const MOON_LIGHT_DIR = useMemo(() => new THREE.Vector3(45, 45, -80).normalize(), []);
+  // Moon light direction: from moon position (35, 45, -80)
+  const MOON_LIGHT_DIR = useMemo(() => new THREE.Vector3(35, 45, -80).normalize(), []);
 
   useEffect(() => {
     if (directionalLightRef.current) {
@@ -312,7 +341,7 @@ function SceneLighting() {
     }
     if (moonLightRef.current) {
       moonLightRef.current.position.copy(MOON_LIGHT_DIR.clone().multiplyScalar(500));
-      moonLightRef.current.intensity = moonLightIntensity;
+      moonLightRef.current.intensity = moonLightIntensity * 10;
       moonLightRef.current.color.set(moonColorHex);
     }
     if (ambientLightRef.current) {
@@ -342,7 +371,7 @@ function SceneLighting() {
       <directionalLight
         ref={moonLightRef}
         position={[MOON_LIGHT_DIR.x * 500, MOON_LIGHT_DIR.y * 500, MOON_LIGHT_DIR.z * 500]}
-        intensity={0}
+        intensity={moonLightIntensity * 10}
         color="#c8d8f0"
         castShadow={false}
       />
