@@ -1,8 +1,6 @@
 import { useRef, useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useControls, folder } from 'leva';
-import { SOLAR } from '../utils/solar';
 
 // ─── Volumetric Cloud Sky ───
 // Ray-marched clouds using David Hoskins' FBM noise technique from Shadertoy.
@@ -359,29 +357,11 @@ const CLOUD_FRAGMENT = /* glsl */ `
 
 // ─── React Component ───
 
-export default function CloudSky() {
+export default function CloudSky({ timeOfDay, lightX, lightY, lightZ, sunColorHex, cloudColorHex, shadowColorHex, fogColor, fogNear, fogFar, moonLightIntensity, moonColorHex }) {
   const meshRef = useRef();
   const materialRef = useRef();
   const { camera } = useThree();
   const _cameraDir = useMemo(() => new THREE.Vector3(), []);
-
-  // Share light and time controls with other scene components
-  const { lightX, lightY, lightZ, sunColorHex, cloudColorHex, shadowColorHex, timeOfDay, fogColor, fogNear, fogFar, moonLightIntensity, moonColorHex } = useControls({
-    'Time of Day': folder({
-      timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, render: () => false },
-      lightX: { value: SOLAR.lightX, render: () => false },
-      lightY: { value: SOLAR.lightY, render: () => false },
-      lightZ: { value: SOLAR.lightZ, render: () => false },
-      sunColorHex: { value: SOLAR.sunColorHex, render: () => false },
-      cloudColorHex: { value: SOLAR.cloudColorHex, render: () => false },
-      shadowColorHex: { value: SOLAR.shadowColorHex, render: () => false },
-      fogColor: { value: SOLAR.fogColor, render: () => false },
-      fogNear: { value: SOLAR.fogNear, render: () => false },
-      fogFar: { value: SOLAR.fogFar, render: () => false },
-      moonLightIntensity: { value: SOLAR.moonLightIntensity, render: () => false },
-      moonColorHex: { value: SOLAR.moonColorHex, render: () => false },
-    }),
-  });
 
   // Hardcoded lens flare position (previously exposed in Leva)
   const lensFlarePositionH = 1;

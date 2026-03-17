@@ -1,5 +1,4 @@
 import { useRef, useMemo, useEffect } from 'react';
-import { useControls, folder } from 'leva';
 import * as THREE from 'three';
 
 const SUN_VERTEX = /* glsl */ `
@@ -30,15 +29,8 @@ const SUN_FRAGMENT = /* glsl */ `
   }
 `;
 
-export default function Sun() {
+export default function Sun({ timeOfDay }) {
   const meshRef = useRef();
-
-  // Read timeOfDay from leva like Moon does
-  const { timeOfDay } = useControls({
-    'Time of Day': folder({
-      timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, render: () => false },
-    }),
-  });
 
   // Calculate sun color based on timeOfDay (synced with sky's golden hour in solar.js)
   const sunColor = useMemo(() => {

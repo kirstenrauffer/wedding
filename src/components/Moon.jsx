@@ -223,7 +223,7 @@ export default function Moon({ timeOfDay = 12 }) {
   const materialRef = useRef();
 
   // Moon position: in the sky, visible from camera
-  const moonPosition = new THREE.Vector3(45, 45, -80);
+  const moonPosition = new THREE.Vector3(75, 45, -80);
 
   // Read light direction from Leva (solar system)
   const { lightX, lightY, lightZ } = useControls({

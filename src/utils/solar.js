@@ -90,9 +90,9 @@ export function computeSolarParams(hours) {
   const nightMid = '#121929';
   const nightHorizon = '#141E2D';
 
-  const dayTop = '#1A3A70';
-  const dayMid = '#2A5FA8';
-  const dayHorizon = '#3A7AC8';
+  const dayTop = '#0D2A5C';
+  const dayMid = '#1A4A8C';
+  const dayHorizon = '#2A6AB8';
 
   // Sunrise palette — soft pinks, lavender, warm peach (Kiki's dawn over the ocean)
   const sunriseTop = '#3A2A5E';     // dusky lavender-blue

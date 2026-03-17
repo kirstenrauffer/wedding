@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef } from 'react';
+import { useMemo, useEffect, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   EffectComposer,
@@ -13,28 +13,15 @@ import {
 import { ToneMappingMode } from 'postprocessing';
 import * as THREE from 'three';
 import { Water } from 'three/examples/jsm/objects/Water.js';
-import { useControls, folder } from 'leva';
 import CloudSky from './CloudSky';
 import StarField from './StarField';
 import Moon from './Moon';
 import Sun from './Sun';
-import { SOLAR, computeSolarParams } from '../utils/solar';
+import Slider from './Slider';
+import { computeSolarParams } from '../utils/solar';
 import { KuwaharaEffect } from '../effects/KuwaharaEffect';
 
-// ─── Ocean Water Component ───
-
-function OceanWater() {
-  const { lightX, lightY, lightZ, sunColorHex, timeOfDay, moonLightIntensity, moonColorHex } = useControls({
-    'Time of Day': folder({
-      lightX: { value: SOLAR.lightX, render: () => false },
-      lightY: { value: SOLAR.lightY, render: () => false },
-      lightZ: { value: SOLAR.lightZ, render: () => false },
-      sunColorHex: { value: SOLAR.sunColorHex, render: () => false },
-      timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, render: () => false },
-      moonLightIntensity: { value: SOLAR.moonLightIntensity, render: () => false },
-      moonColorHex: { value: SOLAR.moonColorHex, render: () => false },
-    }),
-  });
+function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightIntensity, moonColorHex }) {
 
   // Compute water color based on time of day
   const waterColorHex = useMemo(() => {
@@ -194,14 +181,7 @@ const SKY_FRAGMENT = /* glsl */ `
   }
 `;
 
-function GradientSky() {
-  const { skyTopHex, skyMidHex, skyHorizonHex } = useControls({
-    'Time of Day': folder({
-      skyTopHex: { value: '#1E5B8E', render: () => false },
-      skyMidHex: { value: '#4A90C4', render: () => false },
-      skyHorizonHex: { value: '#87BBDA', render: () => false },
-    }),
-  });
+function GradientSky({ skyTopHex, skyMidHex, skyHorizonHex }) {
 
   const uniforms = useMemo(() => ({
     topColor: { value: new THREE.Color('#1E5B8E') },
@@ -233,13 +213,8 @@ function GradientSky() {
 
 const KuwaharaComponent = wrapEffect(KuwaharaEffect);
 
-function PostProcessing() {
-  // Read timeOfDay for bloom intensity scaling
-  const { timeOfDay } = useControls({
-    'Time of Day': folder({
-      timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, render: () => false },
-    }),
-  });
+function PostProcessing({ timeOfDay }) {
+  // Receive timeOfDay as prop for bloom intensity scaling
 
   // Compute solar elevation for bloom intensity scaling
   const elevation = useMemo(() => {
@@ -308,27 +283,11 @@ function PostProcessing() {
 // ─── Lighting & Fog System ───
 // Provides directional/ambient light and atmospheric fog based on sun position
 
-function SceneLighting() {
+function SceneLighting({ lightX, lightY, lightZ, sunColorHex, ambientIntensity, directionalIntensity, fogColor, fogFar, moonLightIntensity, moonAmbientIntensity, moonColorHex }) {
   const directionalLightRef = useRef();
   const moonLightRef = useRef();
   const ambientLightRef = useRef();
   const { scene } = useThree();
-
-  const { lightX, lightY, lightZ, sunColorHex, ambientIntensity, directionalIntensity, fogColor, fogFar, moonLightIntensity, moonAmbientIntensity, moonColorHex } = useControls({
-    'Time of Day': folder({
-      lightX: { value: SOLAR.lightX, render: () => false },
-      lightY: { value: SOLAR.lightY, render: () => false },
-      lightZ: { value: SOLAR.lightZ, render: () => false },
-      sunColorHex: { value: SOLAR.sunColorHex, render: () => false },
-      ambientIntensity: { value: SOLAR.ambientIntensity, render: () => false },
-      directionalIntensity: { value: SOLAR.directionalIntensity, render: () => false },
-      fogColor: { value: SOLAR.fogColor, render: () => false },
-      fogFar: { value: 2500, render: () => false },
-      moonLightIntensity: { value: SOLAR.moonLightIntensity, render: () => false },
-      moonAmbientIntensity: { value: SOLAR.moonAmbientIntensity, render: () => false },
-      moonColorHex: { value: SOLAR.moonColorHex, render: () => false },
-    }),
-  });
 
   // Moon light direction: from moon position (35, 45, -80)
   const MOON_LIGHT_DIR = useMemo(() => new THREE.Vector3(35, 45, -80).normalize(), []);
@@ -379,102 +338,83 @@ function SceneLighting() {
   );
 }
 
-// ─── Time-of-Day Controller ───
-// Drives sun position, sky atmosphere, lighting, and cloud colors from a single slider.
-
-function TimeOfDayController() {
-  const currentHour = useMemo(() => {
-    const now = new Date();
-    return Math.round((now.getHours() + now.getMinutes() / 60) * 4) / 4;
-  }, []);
-
-  const [{ timeOfDay }, set] = useControls(() => ({
-    'Time of Day': folder({
-      timeOfDay: { value: currentHour, min: 0, max: 24, step: 0.25, label: 'Hour (0–24)' },
-      lightX: { value: SOLAR.lightX, render: () => false },
-      lightY: { value: SOLAR.lightY, render: () => false },
-      lightZ: { value: SOLAR.lightZ, render: () => false },
-      sunColorHex: { value: SOLAR.sunColorHex, render: () => false },
-      ambientIntensity: { value: SOLAR.ambientIntensity, render: () => false },
-      directionalIntensity: { value: SOLAR.directionalIntensity, render: () => false },
-      fogColor: { value: SOLAR.fogColor, render: () => false },
-      fogFar: { value: 2500, render: () => false },
-      skyTopHex: { value: SOLAR.skyTopHex, render: () => false },
-      skyMidHex: { value: SOLAR.skyMidHex, render: () => false },
-      skyHorizonHex: { value: SOLAR.skyHorizonHex, render: () => false },
-      moonLightIntensity: { value: SOLAR.moonLightIntensity, render: () => false },
-      moonAmbientIntensity: { value: SOLAR.moonAmbientIntensity, render: () => false },
-      moonColorHex: { value: SOLAR.moonColorHex, render: () => false },
-    }),
-  }));
-
-  // Auto-update disabled - slider works manually
-  // useEffect(() => {
-  //   const interval = setInterval(() => {
-  //     const now = new Date();
-  //     const realTimeOfDay = Math.round((now.getHours() + now.getMinutes() / 60) * 4) / 4;
-  //     set({ timeOfDay: realTimeOfDay });
-  //   }, 1000);
-  //   return () => clearInterval(interval);
-  // }, [set]);
-
-  useEffect(() => {
-    const p = computeSolarParams(timeOfDay);
-    set({
-      lightX: p.lightX,
-      lightY: p.lightY,
-      lightZ: p.lightZ,
-      sunColorHex: p.sunColorHex,
-      ambientIntensity: p.ambientIntensity,
-      directionalIntensity: p.directionalIntensity,
-      fogColor: p.fogColor,
-      fogFar: p.fogFar,
-      skyTopHex: p.skyTopHex,
-      skyMidHex: p.skyMidHex,
-      skyHorizonHex: p.skyHorizonHex,
-      moonLightIntensity: p.moonLightIntensity,
-      moonAmbientIntensity: p.moonAmbientIntensity,
-      moonColorHex: p.moonColorHex,
-    });
-  }, [timeOfDay, set]);
-
-  return null;
-}
-
 // ─── Main Scene ───
 
-function Scene() {
-  const { timeOfDay, fogColor, fogFar } = useControls('Time of Day', {
-    timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, label: 'Hour (0–24)', render: () => false },
-    fogColor: { value: SOLAR.fogColor, render: () => false },
-    fogFar: { value: 2500, render: () => false },
-  });
-
+function Scene({ timeOfDay }) {
   const { scene } = useThree();
 
-  // Initialize fog on first render
+  // Compute all solar parameters once per timeOfDay change
+  const solar = useMemo(() => computeSolarParams(timeOfDay), [timeOfDay]);
+
+  // Initialize fog on first render with computed fog values
   useEffect(() => {
     if (!scene.fog) {
-      scene.fog = new THREE.Fog(fogColor, 50, fogFar);
+      scene.fog = new THREE.Fog(solar.fogColor, solar.fogNear, solar.fogFar);
+    } else {
+      // Update fog if it exists
+      scene.fog.color.set(solar.fogColor);
+      scene.fog.near = solar.fogNear;
+      scene.fog.far = solar.fogFar;
     }
-  }, [scene, fogColor, fogFar]);
+  }, [scene, solar.fogColor, solar.fogNear, solar.fogFar]);
 
   return (
     <>
-      <TimeOfDayController />
-      <SceneLighting />
-      <GradientSky />
-      <StarField />
-      <Sun />
+      <SceneLighting
+        lightX={solar.lightX}
+        lightY={solar.lightY}
+        lightZ={solar.lightZ}
+        sunColorHex={solar.sunColorHex}
+        ambientIntensity={solar.ambientIntensity}
+        directionalIntensity={solar.directionalIntensity}
+        fogColor={solar.fogColor}
+        fogFar={solar.fogFar}
+        moonLightIntensity={solar.moonLightIntensity}
+        moonAmbientIntensity={solar.moonAmbientIntensity}
+        moonColorHex={solar.moonColorHex}
+      />
+      <GradientSky
+        skyTopHex={solar.skyTopHex}
+        skyMidHex={solar.skyMidHex}
+        skyHorizonHex={solar.skyHorizonHex}
+      />
+      <StarField timeOfDay={timeOfDay} />
+      <Sun timeOfDay={timeOfDay} />
       <Moon timeOfDay={timeOfDay} />
-      <CloudSky />
-      <OceanWater />
-      <PostProcessing />
+      <CloudSky
+        timeOfDay={timeOfDay}
+        lightX={solar.lightX}
+        lightY={solar.lightY}
+        lightZ={solar.lightZ}
+        sunColorHex={solar.sunColorHex}
+        cloudColorHex={solar.cloudColorHex}
+        shadowColorHex={solar.shadowColorHex}
+        fogColor={solar.fogColor}
+        fogNear={solar.fogNear}
+        fogFar={solar.fogFar}
+        moonLightIntensity={solar.moonLightIntensity}
+        moonColorHex={solar.moonColorHex}
+      />
+      <OceanWater
+        timeOfDay={timeOfDay}
+        lightX={solar.lightX}
+        lightY={solar.lightY}
+        lightZ={solar.lightZ}
+        sunColorHex={solar.sunColorHex}
+        moonLightIntensity={solar.moonLightIntensity}
+        moonColorHex={solar.moonColorHex}
+      />
+      <PostProcessing timeOfDay={timeOfDay} />
     </>
   );
 }
 
 export default function OceanScene() {
+  const [timeOfDay, setTimeOfDay] = useState(() => {
+    const now = new Date();
+    return Math.round((now.getHours() + now.getMinutes() / 60) * 20) / 20;
+  });
+
   return (
     <div className="ocean-canvas">
       <Canvas
@@ -489,8 +429,12 @@ export default function OceanScene() {
         dpr={[1, 2]}
         shadows
       >
-        <Scene />
+        <Scene timeOfDay={timeOfDay} />
       </Canvas>
+      <div className='ocean-canvas__slider'>
+         <Slider min={0} max={24} step={0.05} value={timeOfDay} onChange={setTimeOfDay} />
+
+      </div>
     </div>
   );
 }

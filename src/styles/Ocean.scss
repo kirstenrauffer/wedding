@@ -6,8 +6,19 @@
   overflow: hidden;
   border-radius: 40px;
   margin: 0 auto;
+  position: relative;
 
   canvas {
     display: block;
+  }
+
+  &__slider {
+    position: absolute;
+    top: 2rem;
+    z-index: 100;
+    margin: 0 auto;
+    display: flex;
+    justify-content: center;
+    width: 100%;
   }
 }

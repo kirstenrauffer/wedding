@@ -1,6 +1,5 @@
 import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { useControls, folder } from 'leva';
 import * as THREE from 'three';
 import { STAR_VERT, STAR_FRAG, STAR_CONFIG } from '../shaders/stars';
 import starTexture from '../assets/star.png';
@@ -110,17 +109,10 @@ function buildStarData(count, seed, minSize, maxSize, milkyWayBias) {
 
 // ─── StarField component ──────────────────────────────────────────────────────
 
-export default function StarField() {
+export default function StarField({ timeOfDay }) {
   const groupRef  = useRef();
   const bgRef     = useRef();
   const brightRef = useRef();
-
-  // Share the Time of Day slider value managed by TimeOfDayController
-  const { timeOfDay } = useControls({
-    'Time of Day': folder({
-      timeOfDay: { value: 12, min: 0, max: 24, step: 0.25, render: () => false },
-    }),
-  });
 
   // Star parameters (hardcoded)
   const bgCount = STAR_CONFIG.bgCount;
