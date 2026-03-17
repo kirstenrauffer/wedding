@@ -388,7 +388,7 @@ export default function CloudSky() {
   const lensFlarePositionV = 1;
 
   // Cloud parameters (locked - do not modify)
-  const coverage = 0.30;
+  const coverageDay = 0.30;
   const fluffiness = 0.55;
   const cloudScale = 0.5;
   const cloudSpeed = 0.3;
@@ -509,6 +509,9 @@ export default function CloudSky() {
     const effectiveColor = new THREE.Color(sunColorHex)
       .lerp(new THREE.Color(moonColorHex), cloudNightFactor)
       .multiplyScalar(1.0 - cloudNightFactor * 0.6); // dim down: moon is much dimmer
+
+    // Reduce cloud coverage by 50% at night
+    const coverage = coverageDay * (1 - cloudNightFactor * 0.5);
 
     // Reactive uniform updates
     mat.uniforms.sunDirection.value.copy(effectiveLightDir);
