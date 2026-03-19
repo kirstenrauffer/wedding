@@ -409,11 +409,11 @@ function Scene({ timeOfDay }) {
   );
 }
 
-export default function OceanScene() {
+export default function OceanScene({ isModalOpen }) {
   const [timeOfDay, setTimeOfDay] = useState(17); // Start at 5:00 PM
 
   return (
-    <div className="ocean-canvas">
+    <div className={`ocean-canvas${isModalOpen ? ' ocean-canvas--fullscreen' : ''}`}>
       <Canvas
         camera={{ position: [0, 15, 80], fov: 55, near: 1, far: 500000 }}
         gl={{

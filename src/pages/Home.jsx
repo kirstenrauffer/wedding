@@ -3,10 +3,10 @@ import Slider from '../components/Slider';
 
 import '../styles/Ocean.scss';
 
-function Home() {
+function Home({ isModalOpen }) {
   return (
     <section className="home">
-      <OceanScene />
+      <OceanScene isModalOpen={isModalOpen} />
     </section>
   );
 }

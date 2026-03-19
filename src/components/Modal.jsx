@@ -18,7 +18,7 @@ export default function Modal({ isOpen, onClose, children }) {
 
   const handleClose = () => {
     setIsClosing(true);
-    setTimeout(onClose, 300); // Match animation duration
+    setTimeout(onClose, 1000); // Match animation duration (1s fadeOut/scaleOut)
   };
 
   if (!isOpen) return null;

@@ -1,20 +1,23 @@
-import { useState } from 'react';
 import '../styles/Navigation.scss';
 import WaveText from './WaveText';
 import TravelModal from './TravelModal';
 import HotelModal from './HotelModal';
 import FAQModal from './FAQModal';
 
-export default function Navigation() {
-  const [openModal, setOpenModal] = useState(null);
-
+export default function Navigation({ openModal, setOpenModal, setIsSceneExpanded }) {
   const handleLinkClick = (e, link) => {
     e.preventDefault();
-    setOpenModal(link);
+    setIsSceneExpanded(true);
+    setTimeout(() => {
+      setOpenModal(link);
+    }, 300);
   };
 
   const closeModal = () => {
     setOpenModal(null);
+    setTimeout(() => {
+      setIsSceneExpanded(false);
+    }, 100);
   };
 
   return (
