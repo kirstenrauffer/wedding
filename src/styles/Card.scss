@@ -7,8 +7,20 @@
   -webkit-backdrop-filter: blur(10px);
   overflow: hidden;
   transition: all 0.3s ease;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
 
-  &:hover {
+  &.travel-card {
+    background: rgba(0, 0, 0, 0.4);
+
+    &:hover {
+      background: rgba(0, 0, 0, 0.5);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+  }
+
+  &:not(.travel-card):hover {
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.15);
   }
@@ -19,13 +31,17 @@
 
     h1, h2, h3, h4, h5, h6 {
       margin: 0;
-      color: white;
+      color: rgba(255, 255, 255, 0.75);
     }
   }
 
   &__body {
     padding: 1.5rem;
-    color: rgba(255, 255, 255, 0.9);
+    color: rgba(255, 255, 255, 0.75);
+    overflow-y: auto;
+    flex: 1;
+    overflow-x: hidden;
+    min-height: 0;
 
     p {
       margin: 0 0 1rem 0;

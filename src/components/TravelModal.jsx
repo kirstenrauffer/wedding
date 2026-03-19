@@ -2,6 +2,7 @@ import Modal from './Modal';
 import Card from './Card';
 import CardHeader from './CardHeader';
 import CardBody from './CardBody';
+import '../styles/TravelModal.scss';
 
 const TRAVEL_OPTIONS = [
   {
@@ -23,8 +24,8 @@ const TRAVEL_OPTIONS = [
 ];
 
 const TAXI_OPTIONS = [
-  { name: 'London Taxi', phone: '(732) 291-8000' },
-  { name: 'Middletown Yellow Taxi Cab', phone: '(732) 671-4600' },
+  { name: '33 London Taxi', phone: '(732) 291-8000' },
+  { name: 'Middletown Taxi', phone: '(732) 671-4600' },
   { name: 'All the Time Taxi', phone: '(732) 787-1212' },
   { name: 'Go-Go Car Service', phone: '(732) 787-4646' },
 ];
@@ -32,9 +33,9 @@ const TAXI_OPTIONS = [
 export default function TravelModal({ isOpen, onClose, onCloseStart, closeDelay }) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} onCloseStart={onCloseStart} closeDelay={closeDelay}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem', maxWidth: '900px', width: '100%' }}>
+      <div className="travel-cards">
         {TRAVEL_OPTIONS.map((option, index) => (
-          <Card key={index}>
+          <Card key={index} className="travel-card">
             <CardHeader>
               <h3>{option.title}</h3>
             </CardHeader>
@@ -44,12 +45,11 @@ export default function TravelModal({ isOpen, onClose, onCloseStart, closeDelay 
           </Card>
         ))}
 
-        <Card>
+        <Card className="travel-card">
           <CardHeader>
             <h3>Local Taxis</h3>
           </CardHeader>
           <CardBody>
-            <p>Uber works just fine in the area, but if you wanted to call ahead to arrange a pick up:</p>
             <ul>
               {TAXI_OPTIONS.map((taxi, index) => (
                 <li key={index}>

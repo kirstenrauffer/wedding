@@ -1,0 +1,171 @@
+.hotel-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 1.5rem;
+  width: 100%;
+  justify-items: center;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.hotel-cards > p {
+  grid-column: 1 / -1;
+}
+
+.hotel-card__description {
+  font-size: 1.1rem;
+  margin-bottom: 1.5rem;
+}
+
+.hotel-card {
+  display: block;
+  width: 100%;
+  max-width: 450px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: all 0.2s ease-in;
+  position: relative;
+  text-decoration: none !important;
+  color: inherit;
+  overflow: visible;
+
+  * {
+    text-decoration: none !important;
+  }
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 40px 10px rgba(255, 255, 255, 0.25), inset 0 0 20px rgba(255, 255, 255, 0.0625);
+    transition: all 0.2s ease-out;
+
+    &:before {
+      animation: shine 0.5s 0s linear;
+    }
+  }
+
+  &:before {
+    content: '';
+    display: block;
+    width: 0px;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    opacity: 0;
+    background: white;
+    box-shadow: 0 0 15px 3px rgba(255, 255, 255, 0.3);
+    transform: skewX(-20deg);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  &--featured {
+    background: rgba(100, 200, 255, 0.18);
+    border-color: rgba(100, 200, 255, 0.4);
+
+    &:hover {
+      background: rgba(100, 200, 255, 0.15);
+      border-color: rgba(100, 200, 255, 0.5);
+      box-shadow: 0 0 50px 15px rgba(100, 200, 255, 0.25), inset 0 0 20px rgba(100, 200, 255, 0.125);
+    }
+  }
+
+  &__image {
+    width: 100%;
+    height: 250px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 12px 12px 0 0;
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  &__content {
+    padding: 1.5rem;
+  }
+
+  h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.5rem;
+    color: white;
+    text-decoration: none;
+  }
+
+  p, span {
+    text-decoration: none;
+  }
+
+  &__address {
+    margin: 0 0 0.75rem 0;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.95rem;
+  }
+
+  &__drive-time {
+    margin: 0 0 1rem 0;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.9rem;
+  }
+
+  &__pills {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+
+  &__note {
+    margin: 0 0 1.25rem 0;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-left: 3px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.5;
+
+    strong {
+      color: white;
+    }
+  }
+
+}
+
+.pill {
+  display: inline-block;
+  padding: 0.4rem 0.9rem;
+  background: rgba(100, 200, 255, 0.35);
+  border: 1px solid rgba(100, 200, 255, 0.5);
+  border-radius: 20px;
+  font-size: 0.8rem;
+  color: white;
+  font-weight: 500;
+  white-space: nowrap;
+
+  &:first-child {
+    background: rgba(76, 200, 120, 0.35);
+    border-color: rgba(76, 200, 120, 0.5);
+  }
+}
+
+@keyframes shine {
+  from {
+    opacity: 0;
+    left: 0%;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+    left: 100%;
+  }
+}
