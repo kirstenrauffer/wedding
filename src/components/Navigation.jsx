@@ -1,4 +1,5 @@
 import '../styles/Navigation.scss';
+import { createPortal } from 'react-dom';
 import WaveText from './WaveText';
 import TravelModal from './TravelModal';
 import HotelModal from './HotelModal';
@@ -9,8 +10,8 @@ export default function Navigation({ openModal, setOpenModal, setIsSceneExpanded
     e.preventDefault();
     setIsSceneExpanded(true); // slider fades, FLIP pins element
     setTimeout(() => {
-      setOpenModal(link); // modal opens after slider fades (300ms)
-    }, 300);
+      setOpenModal(link); // modal opens after ocean expand completes (450ms)
+    }, 450);
   };
 
   const handleCloseStart = () => {
@@ -46,9 +47,18 @@ export default function Navigation({ openModal, setOpenModal, setIsSceneExpanded
         </ul>
       </header>
 
-      <TravelModal isOpen={openModal === 'travel'} onClose={closeModal} onCloseStart={handleCloseStart} closeDelay={0} />
-      <HotelModal isOpen={openModal === 'hotel'} onClose={closeModal} onCloseStart={handleCloseStart} closeDelay={0} />
-      <FAQModal isOpen={openModal === 'faq'} onClose={closeModal} onCloseStart={handleCloseStart} closeDelay={0} />
+      {createPortal(
+        <TravelModal isOpen={openModal === 'travel'} onClose={closeModal} onCloseStart={handleCloseStart} closeDelay={0} />,
+        document.body
+      )}
+      {createPortal(
+        <HotelModal isOpen={openModal === 'hotel'} onClose={closeModal} onCloseStart={handleCloseStart} closeDelay={0} />,
+        document.body
+      )}
+      {createPortal(
+        <FAQModal isOpen={openModal === 'faq'} onClose={closeModal} onCloseStart={handleCloseStart} closeDelay={0} />,
+        document.body
+      )}
     </>
   );
 }

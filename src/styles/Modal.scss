@@ -8,7 +8,7 @@
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     z-index: 999;
-    animation: fadeIn 0.25s ease-out;
+    animation: fadeIn 0.25s ease-out backwards;
 
     &--closing {
       animation: fadeOut 0.25s ease-out;
@@ -33,7 +33,19 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    animation: fadeIn 0.25s ease-out;
+    animation: fadeIn 0.25s ease-out backwards;
+
+    &::after {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.4) 100%);
+      z-index: -1;
+    }
 
     &--closing {
       animation: scaleOut 0.25s ease-out forwards;
@@ -44,9 +56,9 @@
     position: fixed;
     top: 2rem;
     right: 2rem;
-    background: rgba(0, 0, 0, 0.15);
-    border: 1px solid #000;
-    color: #000;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid #fff;
+    color: #fff;
     font-size: 2.5rem;
     cursor: pointer;
     opacity: 0.8;
@@ -62,7 +74,7 @@
 
     &:hover {
       opacity: 1;
-      background: rgba(0, 0, 0, 0.25);
+      background: rgba(255, 255, 255, 0.25);
     }
   }
 }
