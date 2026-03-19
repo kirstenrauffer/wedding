@@ -7,17 +7,18 @@ import FAQModal from './FAQModal';
 export default function Navigation({ openModal, setOpenModal, setIsSceneExpanded }) {
   const handleLinkClick = (e, link) => {
     e.preventDefault();
-    setIsSceneExpanded(true);
+    setIsSceneExpanded(true); // slider fades, FLIP pins element
     setTimeout(() => {
-      setOpenModal(link);
+      setOpenModal(link); // modal opens after slider fades (300ms)
     }, 300);
   };
 
+  const handleCloseStart = () => {
+    setIsSceneExpanded(false); // ocean FLIP collapse starts immediately
+  };
+
   const closeModal = () => {
-    setOpenModal(null);
-    setTimeout(() => {
-      setIsSceneExpanded(false);
-    }, 100);
+    setOpenModal(null); // called after modal animation completes
   };
 
   return (
@@ -45,9 +46,9 @@ export default function Navigation({ openModal, setOpenModal, setIsSceneExpanded
         </ul>
       </header>
 
-      <TravelModal isOpen={openModal === 'travel'} onClose={closeModal} />
-      <HotelModal isOpen={openModal === 'hotel'} onClose={closeModal} />
-      <FAQModal isOpen={openModal === 'faq'} onClose={closeModal} />
+      <TravelModal isOpen={openModal === 'travel'} onClose={closeModal} onCloseStart={handleCloseStart} closeDelay={0} />
+      <HotelModal isOpen={openModal === 'hotel'} onClose={closeModal} onCloseStart={handleCloseStart} closeDelay={0} />
+      <FAQModal isOpen={openModal === 'faq'} onClose={closeModal} onCloseStart={handleCloseStart} closeDelay={0} />
     </>
   );
 }

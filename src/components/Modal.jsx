@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import '../styles/Modal.scss';
 
-export default function Modal({ isOpen, onClose, children }) {
+export default function Modal({ isOpen, onClose, onCloseStart, closeDelay = 0, children }) {
   const [isClosing, setIsClosing] = useState(false);
 
   useEffect(() => {
@@ -17,8 +17,11 @@ export default function Modal({ isOpen, onClose, children }) {
   }, [isOpen]);
 
   const handleClose = () => {
-    setIsClosing(true);
-    setTimeout(onClose, 1000); // Match animation duration (1s fadeOut/scaleOut)
+    if (onCloseStart) onCloseStart(); // signal parent to start ocean collapse
+    setTimeout(() => {
+      setIsClosing(true); // modal close animation starts after closeDelay
+      setTimeout(onClose, 250); // Match animation duration (0.25s fadeOut/scaleOut)
+    }, closeDelay);
   };
 
   if (!isOpen) return null;

@@ -29,9 +29,9 @@ const TAXI_OPTIONS = [
   { name: 'Go-Go Car Service', phone: '(732) 787-4646' },
 ];
 
-export default function TravelModal({ isOpen, onClose }) {
+export default function TravelModal({ isOpen, onClose, onCloseStart, closeDelay }) {
   return (
-    <Modal isOpen={isOpen} onClose={onClose}>
+    <Modal isOpen={isOpen} onClose={onClose} onCloseStart={onCloseStart} closeDelay={closeDelay}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem', maxWidth: '900px', width: '100%' }}>
         {TRAVEL_OPTIONS.map((option, index) => (
           <Card key={index}>

@@ -3,9 +3,9 @@ import Card from './Card';
 import CardHeader from './CardHeader';
 import CardBody from './CardBody';
 
-export default function HotelModal({ isOpen, onClose }) {
+export default function HotelModal({ isOpen, onClose, onCloseStart, closeDelay }) {
   return (
-    <Modal isOpen={isOpen} onClose={onClose}>
+    <Modal isOpen={isOpen} onClose={onClose} onCloseStart={onCloseStart} closeDelay={closeDelay}>
       <Card>
         <CardHeader>
           <h2>Hotel Accommodations</h2>

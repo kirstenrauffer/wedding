@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef, useState } from 'react';
+import { useMemo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   EffectComposer,
@@ -411,9 +411,109 @@ function Scene({ timeOfDay }) {
 
 export default function OceanScene({ isModalOpen }) {
   const [timeOfDay, setTimeOfDay] = useState(17); // Start at 5:00 PM
+  const [sliderVisible, setSliderVisible] = useState(true);
+  const containerRef = useRef();
+  const homeRectRef = useRef(null);
+  const closeTimeoutRef = useRef(null);
+
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    if (isModalOpen) {
+      // Clear any pending close animation timeout
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+        closeTimeoutRef.current = null;
+      }
+
+      // Hide slider (fades via CSS transition)
+      setSliderVisible(false);
+
+      // Capture current viewport position before style change
+      const rect = el.getBoundingClientRect();
+      homeRectRef.current = rect;
+
+      // Calculate transforms to make fullscreen element appear at original position/size
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const scaleX = rect.width / window.innerWidth;
+      const scaleY = rect.height / window.innerHeight;
+      const tX = centerX - window.innerWidth / 2;
+      const tY = centerY - window.innerHeight / 2;
+
+      // Set to fullscreen size with transform that makes it look like original position/size
+      Object.assign(el.style, {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        width: '100vw',
+        height: '100vh',
+        margin: '0',
+        zIndex: '500',
+        overflow: 'hidden',
+        borderRadius: '40px',
+        transformOrigin: 'center center',
+        transform: `translate(${tX}px, ${tY}px) scale(${scaleX}, ${scaleY})`,
+      });
+
+      // Two rAFs: ensure browser paints initial state before transition fires
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          Object.assign(el.style, {
+            transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-radius 0.4s ease',
+            transform: 'translate(0, 0) scale(1)',
+            borderRadius: '0',
+          });
+        });
+      });
+
+    } else if (homeRectRef.current) {
+      // Calculate transforms to animate back to original position/size
+      const rect = homeRectRef.current;
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const scaleX = rect.width / window.innerWidth;
+      const scaleY = rect.height / window.innerHeight;
+      const tX = centerX - window.innerWidth / 2;
+      const tY = centerY - window.innerHeight / 2;
+
+      // Two rAFs: ensure browser paints expanded state before transition to card state fires
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          Object.assign(el.style, {
+            transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-radius 0.3s ease',
+            transform: `translate(${tX}px, ${tY}px) scale(${scaleX}, ${scaleY})`,
+            borderRadius: '40px',
+          });
+        });
+      });
+
+      // After collapse animation completes, restore to normal CSS flow and fade slider back in
+      closeTimeoutRef.current = setTimeout(() => {
+        // Explicitly remove all inline styles
+        el.style.position = '';
+        el.style.top = '';
+        el.style.left = '';
+        el.style.width = '';
+        el.style.height = '';
+        el.style.margin = '';
+        el.style.zIndex = '';
+        el.style.overflow = '';
+        el.style.borderRadius = '';
+        el.style.transform = '';
+        el.style.transition = '';
+        el.style.transformOrigin = '';
+
+        homeRectRef.current = null;
+        setSliderVisible(true);
+        closeTimeoutRef.current = null;
+      }, 350); // 0.3s animation + 50ms buffer
+    }
+  }, [isModalOpen]);
 
   return (
-    <div className={`ocean-canvas${isModalOpen ? ' ocean-canvas--fullscreen' : ''}`}>
+    <div ref={containerRef} className="ocean-canvas">
       <Canvas
         camera={{ position: [0, 15, 80], fov: 55, near: 1, far: 500000 }}
         gl={{
@@ -428,9 +528,8 @@ export default function OceanScene({ isModalOpen }) {
       >
         <Scene timeOfDay={timeOfDay} />
       </Canvas>
-      <div className='ocean-canvas__slider'>
-         <Slider min={0} max={24} step={0.05} value={timeOfDay} onChange={setTimeOfDay} />
-
+      <div className={`ocean-canvas__slider${sliderVisible ? '' : ' ocean-canvas__slider--hidden'}`}>
+        <Slider min={0} max={24} step={0.05} value={timeOfDay} onChange={setTimeOfDay} />
       </div>
     </div>
   );
