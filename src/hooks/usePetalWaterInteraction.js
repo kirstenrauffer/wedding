@@ -9,7 +9,7 @@ import { useFrame } from '@react-three/fiber';
  * @param {Function} onPetalHitWater - Callback(normalizedX, normalizedZ) when petal hits water
  * @param {Object} config - Configuration { spawnBoxSize, lifeDuration, windDir, windSpeed, etc. }
  */
-export function usePetalWaterInteraction(petalDataRef, onPetalHitWater, config = {}) {
+export function usePetalWaterInteraction(petalDataRef, onPetalHitWater, config = {}, timeOfDay = 0) {
   const defaultConfig = {
     // Petal spawn ranges (from GommageText.jsx buildPetalData):
     // X: [-60, 20] (center -20, half-width 40)
@@ -40,8 +40,8 @@ export function usePetalWaterInteraction(petalDataRef, onPetalHitWater, config =
     const vAlpha = fadeIn * fadeOut;
 
     // Gravity: petals fall over their lifetime
-    // gravityAmount = 0.5 * 1.2 * (age * lifeDuration)^2
-    const gravityAmount = 0.5 * 1.2 * (age * lifeDuration) * (age * lifeDuration);
+    // gravityAmount = 1.5 * (age * lifeDuration)^2
+    const gravityAmount = 1.5 * (age * lifeDuration) * (age * lifeDuration);
 
     // Upward burst at birth (simplified): peak at age=0.2, 0 outside [0, 0.3]
     const burst = age < 0.3 ? 1.5 * Math.max(0, 1 - Math.abs((age - 0.15) / 0.15)) : 0;
@@ -92,6 +92,17 @@ export function usePetalWaterInteraction(petalDataRef, onPetalHitWater, config =
     const uTimeVal = uTime.value;
     const maxPetals = spawnPositions.length / 3;
 
+    // Rate limit petal hits to prevent ripple queue buildup
+    let hitsThisFrame = 0;
+    const MAX_HITS_PER_FRAME = 2;
+
+    // Log petal stats every 5 seconds for debugging
+    const now = Date.now();
+    if (!window.__petalStatsLastLog) window.__petalStatsLastLog = now;
+    const shouldLog = now - window.__petalStatsLastLog > 5000;
+    let visiblePetals = 0;
+    let petalsSinking = 0;
+
     for (let i = 0; i < maxPetals; i++) {
       const spawnX = spawnPositions[i * 3];
       const spawnY = spawnPositions[i * 3 + 1];
@@ -110,6 +121,10 @@ export function usePetalWaterInteraction(petalDataRef, onPetalHitWater, config =
         uTimeVal
       );
 
+      // Track stats for logging
+      if (vAlpha >= 0.1) visiblePetals++;
+      if (worldY <= 0) petalsSinking++;
+
       // Skip if petal is fading out
       if (vAlpha < 0.1) continue;
 
@@ -118,31 +133,50 @@ export function usePetalWaterInteraction(petalDataRef, onPetalHitWater, config =
       const hasHitKey = `${i}_${Math.floor(birthTime * 10)}`; // Use birth time epoch to track per-lifecycle
       const alreadyHit = hitStateRef.current.has(hasHitKey);
 
-      if (worldY <= waterLevel && !alreadyHit && spawnY > waterLevel) {
+      // Skip ripples during fireworks (7pm–midnight)
+      const isFireworksTime = timeOfDay >= 19 && timeOfDay < 24;
+
+      if (worldY <= waterLevel && !alreadyHit && spawnY > waterLevel && !isFireworksTime) {
         // Petal hit the water!
         hitStateRef.current.set(hasHitKey, true);
 
-        // Compute normalized ripple position (map spawn position to [0, 1])
-        // Using the petal spawn ranges
-        const normX = (spawnX - cfg.spawnMinX) / (cfg.spawnMaxX - cfg.spawnMinX);
-        const normZ = (spawnZ - cfg.spawnMinZ) / (cfg.spawnMaxZ - cfg.spawnMinZ);
+        // Only queue ripple if under the per-frame hit limit
+        if (hitsThisFrame < MAX_HITS_PER_FRAME) {
+          hitsThisFrame++;
 
-        // Clamp to valid range (though they should already be [0, 1])
-        const clampedX = Math.max(0, Math.min(1, normX));
-        const clampedZ = Math.max(0, Math.min(1, normZ));
+          // Compute normalized ripple position (map spawn position to [0, 1])
+          // Using the petal spawn ranges
+          const normX = (spawnX - cfg.spawnMinX) / (cfg.spawnMaxX - cfg.spawnMinX);
+          const normZ = (spawnZ - cfg.spawnMinZ) / (cfg.spawnMaxZ - cfg.spawnMinZ);
 
-        if (typeof window !== 'undefined') {
-          window.__petalHitCount = (window.__petalHitCount || 0) + 1;
-          console.log(`[Ripple] Petal ${i} hit water (count: ${window.__petalHitCount}) at (${clampedX.toFixed(2)}, ${clampedZ.toFixed(2)})`);
+          // Clamp to valid range (though they should already be [0, 1])
+          const clampedX = Math.max(0, Math.min(1, normX));
+          const clampedZ = Math.max(0, Math.min(1, normZ));
+
+          if (typeof window !== 'undefined') {
+            window.__petalHitCount = (window.__petalHitCount || 0) + 1;
+            const logNow = Date.now();
+            if (!window.__petalLastLog) window.__petalLastLog = logNow;
+            if (logNow - window.__petalLastLog > 5000) {
+              console.log('[Petal Tracker] Petal hit count:', window.__petalHitCount);
+              window.__petalLastLog = logNow;
+            }
+          }
+
+          onPetalHitWater(clampedX, clampedZ);
         }
-
-        onPetalHitWater(clampedX, clampedZ);
       }
 
       // Clean up hit state for dead petals
       if (worldY < waterLevel - 5) {
         hitStateRef.current.delete(hasHitKey);
       }
+    }
+
+    // Log petal stats every 5 seconds
+    if (shouldLog) {
+      console.log('[Petal Tracker] Visible petals:', visiblePetals, '| Petals at/below water (y≤0):', petalsSinking, '| Max petals:', maxPetals);
+      window.__petalStatsLastLog = now;
     }
   });
 }

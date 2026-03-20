@@ -5,5 +5,5 @@ import * as THREE from 'three';
 export const MOON_WORLD_POSITION = new THREE.Vector3(0, 30, -80);
 
 // Moon light direction (separate from visual position for lighting balance)
-// Positioned center-right for balanced water lighting
-export const MOON_LIGHT_DIRECTION = new THREE.Vector3(100, 35, -80);
+// Centered (X=0) to align with the visual moon position for night lighting
+export const MOON_LIGHT_DIRECTION = new THREE.Vector3(0, 35, -80);

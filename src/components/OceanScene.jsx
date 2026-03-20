@@ -20,6 +20,7 @@ import Sun from './Sun';
 import Slider from './Slider';
 import GommageText from './GommageText';
 import RippleSimulator from './RippleSimulator';
+import Fireworks from './Fireworks';
 import { computeSolarParams } from '../utils/solar';
 import { usePetalWaterInteraction } from '../hooks/usePetalWaterInteraction';
 import { KuwaharaEffect } from '../effects/KuwaharaEffect';
@@ -48,6 +49,14 @@ const smoothstep = (edge0, edge1, x) => {
 };
 
 function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightIntensity, moonColorHex, skyHorizonHex, rippleNormalMap, rippleConfig }) {
+
+  // Ref to hold current rippleNormalMap (updated via effect, used in onBeforeCompile)
+  const rippleNormalMapRef = useRef(null);
+
+  // Keep ref in sync with prop
+  useEffect(() => {
+    rippleNormalMapRef.current = rippleNormalMap;
+  }, [rippleNormalMap]);
 
   // Compute water color based on sky colors and time of day
   // Water reflects the sky, so use the horizon/mid sky colors but darker and more saturated
@@ -79,11 +88,16 @@ function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightI
 
   // Load water normals texture asynchronously
   useEffect(() => {
+    let mounted = true;
     const textureLoader = new THREE.TextureLoader();
     textureLoader.load('/textures/waternormals.jpg', (tex) => {
+      if (!mounted) return; // Ignore if component unmounted
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
       setWaterNormals(tex);
     });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Calculate night factor for smooth transition (0 = fully night, 1 = day)
@@ -100,10 +114,13 @@ function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightI
   const waterSunDirection = useMemo(() => {
     // Use sun direction when there's significant daylight (nightFactor > 0.3)
     if (nightFactor > 0.3) {
-      return new THREE.Vector3(lightX, lightY, lightZ).normalize();
+      const clampedProgress = Math.max(0, Math.min(1, (timeOfDay - 6) / 12));
+      const solarAngle = clampedProgress * (Math.PI / 2);
+      const x = Math.cos(solarAngle) * 100;
+      return new THREE.Vector3(x, 35, -80).normalize();
     }
     return moonLightDir.clone();
-  }, [lightX, lightY, lightZ, nightFactor, moonLightDir]);
+  }, [timeOfDay, nightFactor, moonLightDir]);
 
   // Water reflection color: moon shimmer at night, fades to sun during day
   const waterSunColor = useMemo(() => {
@@ -143,7 +160,12 @@ function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightI
 
     // Inject ripple normals with alpha guard to avoid flattening water
     w.material.onBeforeCompile = (shader) => {
-      shader.uniforms.uRippleNormals   = { value: null };
+      // Create placeholder texture (1x1 neutral normal) for initialization
+      // Will be replaced with actual ripple normal map when RippleSimulator is ready
+      const placeholderData = new Uint8Array([127, 127, 255, 255]); // neutral normal (0, 0, 1) encoded
+      const placeholderTexture = new THREE.DataTexture(placeholderData, 1, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
+      placeholderTexture.needsUpdate = true;
+      shader.uniforms.uRippleNormals   = { value: rippleNormalMapRef.current || placeholderTexture };
       shader.uniforms.uRippleIntensity = { value: 0.6 };
       shader.uniforms.uRippleMinX      = { value: -60 };
       shader.uniforms.uRippleMaxX      = { value:  20 };
@@ -180,7 +202,7 @@ uniform float uRippleMaxZ;`
     };
 
     return w;
-  }, [waterNormals, waterSunDirection, waterSunColor, waterColorHex, waterDistortion, reflectionScale]); // rippleNormalMap/rippleConfig not included — they're null-init and updated via useEffect
+  }, [waterNormals]);
 
   useEffect(() => {
     if (!water?.material?.uniforms) return;
@@ -188,21 +210,25 @@ uniform float uRippleMaxZ;`
     water.material.uniforms.sunColor.value.copy(waterSunColor);
     water.material.uniforms.sunDirection.value.copy(waterSunDirection);
     water.material.uniforms.waterColor.value.set(waterColorHex);
-
-    if (water.material.uniforms.uRippleNormals && rippleNormalMap) {
-      water.material.uniforms.uRippleNormals.value = rippleNormalMap;
+    if (water.material.uniforms.size) {
+      water.material.uniforms.size.value = waterDistortion;
     }
+
     if (rippleConfig && water.material.uniforms.uRippleMinX) {
       water.material.uniforms.uRippleMinX.value = rippleConfig.spawnMinX;
       water.material.uniforms.uRippleMaxX.value = rippleConfig.spawnMaxX;
       water.material.uniforms.uRippleMinZ.value = rippleConfig.spawnMinZ;
       water.material.uniforms.uRippleMaxZ.value = rippleConfig.spawnMaxZ;
     }
-  }, [water, waterSunColor, waterSunDirection, waterColorHex, rippleNormalMap, rippleConfig]);
+  }, [water, waterSunColor, waterSunDirection, waterColorHex, waterDistortion, rippleConfig]);
 
   useFrame((_, delta) => {
     if (water?.material?.uniforms?.time) {
       water.material.uniforms.time.value += delta * 0.3;
+    }
+    // Keep ripple uniform updated every frame in case it changes
+    if (water?.material?.uniforms?.uRippleNormals && rippleNormalMapRef.current) {
+      water.material.uniforms.uRippleNormals.value = rippleNormalMapRef.current;
     }
   });
 
@@ -448,7 +474,8 @@ function Scene({ timeOfDay }) {
         rippleSimulatorRef.current.addDrop(normalizedX, normalizedZ);
       }
     },
-    rippleConfig
+    rippleConfig,
+    timeOfDay
   );
 
   return (
@@ -474,6 +501,7 @@ function Scene({ timeOfDay }) {
       <StarField timeOfDay={timeOfDay} />
       <Sun timeOfDay={timeOfDay} />
       <Moon timeOfDay={timeOfDay} />
+      <Fireworks timeOfDay={timeOfDay} />
       <GommageText ref={petalDataRef} timeOfDay={timeOfDay} />
       <RippleSimulator onReady={handleRippleReady} />
       <CloudSky
@@ -589,9 +617,9 @@ export default function OceanScene({ isModalOpen }) {
       });
 
       // After collapse animation completes, restore to normal CSS flow and fade slider back in
-      console.log('Setting up close animation timeout...');
+      // console.log('Setting up close animation timeout...');
       closeTimeoutRef.current = setTimeout(() => {
-        console.log('Close animation timeout fired, clearing styles', el.getAttribute('style'));
+        // console.log('Close animation timeout fired, clearing styles', el.getAttribute('style'));
         // Explicitly remove all inline styles
         el.style.position = '';
         el.style.top = '';
@@ -607,7 +635,7 @@ export default function OceanScene({ isModalOpen }) {
         el.style.transition = '';
         el.style.transformOrigin = '';
 
-        console.log('After clearing:', el.getAttribute('style'));
+        // console.log('After clearing:', el.getAttribute('style'));
         homeRectRef.current = null;
         setSliderVisible(true);
         closeTimeoutRef.current = null;

@@ -3,7 +3,7 @@
 // Two shader systems: TEXT (dissolution + glow), PETAL (instanced rose-curve billboards).
 
 export const GOMMAGE_CONFIG = {
-  maxPetals: 150,
+  maxPetals: 60,
   cycleSeconds: 10.0,
 };
 
@@ -197,7 +197,7 @@ export const PETAL_VERT = /* glsl */ `
     vec3 worldPos = aSpawnPos + vec3(windDisp.x, windDisp.y, 0.0) + pos;
 
     // Gravity: petals fall over their lifetime
-    float gravityAmount = 0.5 * 1.2 * (age * lifeDuration) * (age * lifeDuration);
+    float gravityAmount = 1.5 * (age * lifeDuration) * (age * lifeDuration);
     worldPos.y -= gravityAmount;
 
     // Upward burst at birth

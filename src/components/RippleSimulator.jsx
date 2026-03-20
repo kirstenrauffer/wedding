@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 
@@ -8,18 +8,19 @@ import * as THREE from 'three';
  * Exposes normalMap texture for injection into ocean shader.
  */
 export default function RippleSimulator({ onReady, disabled = false }) {
-  const { gl, scene } = useThree();
+  const { gl } = useThree();
   const rtPair = useRef(null);
   const normalMapRef = useRef(null);
   const camera = useRef(new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10));
   const quadGeom = useRef(null);
   const materials = useRef(null);
+  const dropQueue = useRef([]);
 
   const RESOLUTION = 256;
-  const DAMPING = 0.98; // Wave energy loss per frame (lower = more persistence)
+  const DAMPING = 0.96; // Wave energy loss per frame (higher = more persistence)
   const RIPPLE_RADIUS = 0.08; // UV-space radius of ripple splat (larger = wider ripples)
-  const RIPPLE_FORCE = 1.5; // Amplitude of initial displacement (higher = stronger ripples)
-  const NORMAL_STRENGTH = 3.5; // Exaggeration factor for normal extraction (higher = more visible)
+  const RIPPLE_FORCE = 0.8; // Amplitude of initial displacement (higher = stronger ripples)
+  const NORMAL_STRENGTH = 2.0; // Exaggeration factor for normal extraction (higher = more visible)
 
   // Create fullscreen quad geometry (only once)
   useEffect(() => {
@@ -128,6 +129,9 @@ export default function RippleSimulator({ onReady, disabled = false }) {
             newHeight += drop;
           }
 
+          // Kill very small heights to prevent stuck oscillations
+          if (abs(newHeight) < 0.0001) newHeight = 0.0;
+
           gl_FragColor = vec4(newHeight, 0.0, 0.0, 1.0);
         }
       `,
@@ -178,15 +182,8 @@ export default function RippleSimulator({ onReady, disabled = false }) {
     if (onReady) {
       onReady({
         addDrop: (normalizedX, normalizedZ) => {
-          // normalizedX, normalizedZ are in [0, 1]
-          if (materials.current) {
-            materials.current.simulation.uniforms.u_dropCenter.value.set(
-              normalizedX,
-              normalizedZ
-            );
-            materials.current.simulation.uniforms.u_dropRadius.value = RIPPLE_RADIUS;
-            materials.current.simulation.uniforms.u_dropForce.value = RIPPLE_FORCE;
-          }
+          // Queue drop for processing in useFrame (up to 3 per frame)
+          dropQueue.current.push({ x: normalizedX, z: normalizedZ });
         },
         getNormalMap: () => normalMapRef.current,
       });
@@ -202,7 +199,7 @@ export default function RippleSimulator({ onReady, disabled = false }) {
       normalShader.dispose();
       quadGeom.current?.dispose();
     };
-  }, [disabled, gl, onReady]);
+  }, []);
 
   // Create persistent quad mesh and scene for render passes (only after geometry is ready)
   const quadMesh = useRef(null);
@@ -229,29 +226,44 @@ export default function RippleSimulator({ onReady, disabled = false }) {
       return;
     }
 
-    const { current: rtCurrent, prev: rtPrev, next: rtNext } = rtPair.current;
     const simMat = materials.current.simulation;
     const normMat = materials.current.normal;
     const rtNormal = materials.current.rtNormal;
 
-    // 1. Simulation pass: wave equation
-    // Read from current and previous (no feedback loop - writing to different buffer)
+    // Drain exactly one drop per frame — cap queue to prevent unbounded growth
+    const drop = dropQueue.current.shift() ?? null;
+    if (dropQueue.current.length > 4) {
+      dropQueue.current.length = 4;
+    }
+
+    const { current: rtCurrent, prev: rtPrev, next: rtNext } = rtPair.current;
+
+    // Simulation pass: wave equation
     simMat.uniforms.u_currentHeight.value = rtCurrent.texture;
     simMat.uniforms.u_prevHeight.value = rtPrev.texture;
+    if (drop) {
+      simMat.uniforms.u_dropCenter.value.set(drop.x, drop.z);
+      simMat.uniforms.u_dropRadius.value = RIPPLE_RADIUS;
+      simMat.uniforms.u_dropForce.value = RIPPLE_FORCE;
+    } else {
+      simMat.uniforms.u_dropRadius.value = 0;
+      simMat.uniforms.u_dropForce.value = 0;
+    }
     quadMesh.current.material = simMat;
     gl.setRenderTarget(rtNext);
     gl.clear();
     gl.render(quadScene.current, camera.current);
     simMat.uniforms.u_dropRadius.value = 0;
+    simMat.uniforms.u_dropForce.value = 0;
 
-    // 2. Normal extraction pass: derive normals from just-simulated heights
+    // Normal extraction pass: derive normals from just-simulated heights
     normMat.uniforms.u_heightfield.value = rtNext.texture;
     quadMesh.current.material = normMat;
     gl.setRenderTarget(rtNormal);
     gl.clear();
     gl.render(quadScene.current, camera.current);
 
-    // 3. Rotate buffers: next becomes current, current becomes prev, prev becomes next
+    // Rotate buffers: next becomes current, current becomes prev, prev becomes next
     rtPair.current.current = rtNext;
     rtPair.current.prev = rtCurrent;
     rtPair.current.next = rtPrev;
