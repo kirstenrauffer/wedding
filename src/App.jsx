@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Home from './pages/Home';
 import Navigation from './components/Navigation';
@@ -10,6 +10,14 @@ function App() {
   const [openModal, setOpenModal] = useState(null);
   const [isSceneExpanded, setIsSceneExpanded] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (isSceneExpanded) {
+      document.body.classList.add('modal-open');
+    } else {
+      document.body.classList.remove('modal-open');
+    }
+  }, [isSceneExpanded]);
 
   return (
     <BrowserRouter>

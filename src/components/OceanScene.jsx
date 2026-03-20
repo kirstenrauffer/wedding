@@ -102,8 +102,6 @@ function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightI
     if (nightFactor > 0.3) {
       return new THREE.Vector3(lightX, lightY, lightZ).normalize();
     }
-    // At deep night/dawn, lock to the static moon light direction
-    // This prevents the "sweep" caused by simultaneous changes to both direction and lerp weight
     return moonLightDir.clone();
   }, [lightX, lightY, lightZ, nightFactor, moonLightDir]);
 
@@ -549,6 +547,7 @@ export default function OceanScene({ isModalOpen }) {
         left: '0',
         width: '100vw',
         height: '100vh',
+        maxHeight: 'none',
         margin: '0',
         zIndex: '500',
         overflow: 'hidden',
@@ -599,6 +598,7 @@ export default function OceanScene({ isModalOpen }) {
         el.style.left = '';
         el.style.width = '';
         el.style.height = '';
+        el.style.maxHeight = '';
         el.style.margin = '';
         el.style.zIndex = '';
         el.style.overflow = '';

@@ -20,6 +20,10 @@ body {
   background-color: white;
   color: $color-text;
   line-height: 1.6;
+
+  &.modal-open {
+    overflow: hidden;
+  }
 }
 
 #root {

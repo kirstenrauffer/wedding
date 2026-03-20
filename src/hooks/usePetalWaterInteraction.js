@@ -131,9 +131,9 @@ export function usePetalWaterInteraction(petalDataRef, onPetalHitWater, config =
         const clampedX = Math.max(0, Math.min(1, normX));
         const clampedZ = Math.max(0, Math.min(1, normZ));
 
-        if (typeof window !== 'undefined' && !window.__petalHitWaterLogged) {
-          console.log('[Petal Tracker] Petal hit water at normalized position:', { clampedX, clampedZ });
-          window.__petalHitWaterLogged = true;
+        if (typeof window !== 'undefined') {
+          window.__petalHitCount = (window.__petalHitCount || 0) + 1;
+          console.log(`[Ripple] Petal ${i} hit water (count: ${window.__petalHitCount}) at (${clampedX.toFixed(2)}, ${clampedZ.toFixed(2)})`);
         }
 
         onPetalHitWater(clampedX, clampedZ);
