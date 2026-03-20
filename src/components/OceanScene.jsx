@@ -19,7 +19,9 @@ import Moon from './Moon';
 import Sun from './Sun';
 import Slider from './Slider';
 import GommageText from './GommageText';
+import RippleSimulator from './RippleSimulator';
 import { computeSolarParams } from '../utils/solar';
+import { usePetalWaterInteraction } from '../hooks/usePetalWaterInteraction';
 import { KuwaharaEffect } from '../effects/KuwaharaEffect';
 import { MOON_WORLD_POSITION, MOON_LIGHT_DIRECTION } from '../constants/scene';
 
@@ -115,7 +117,7 @@ function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightI
 
   // Scale reflection visibility based on time of day
   const reflectionScale = useMemo(() => {
-    return 0.4 + nightFactor * 0.5; // 0.4 at night → 0.9 at day
+    return 0.1 + nightFactor * 0.8; // 0.1 at night → 0.9 at day
   }, [nightFactor]);
 
   const water = useMemo(() => {
@@ -137,14 +139,14 @@ function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightI
     w.material.onBeforeCompile = (shader) => {
       shader.uniforms.uReflectionScale = { value: reflectionScale };
 
-      // Inject uniform and modify the albedo line to scale reflections
+      // Inject uniform for reflection scaling
       shader.fragmentShader = shader.fragmentShader.replace(
         'uniform vec3 waterColor;',
         'uniform vec3 waterColor;\nuniform float uReflectionScale;'
       );
 
       // Target the exact line from Water.js where reflections are used:
-      // vec3 albedo = mix( ( sunColor * diffuseLight * 0.3 + scatter ) * getShadowMask(), reflectionSample + specularLight, reflectance );
+      // This scales down reflection intensity to reduce star reflections at night
       shader.fragmentShader = shader.fragmentShader.replace(
         'reflectionSample + specularLight, reflectance );',
         '(reflectionSample * uReflectionScale) + specularLight, reflectance );'
@@ -369,6 +371,8 @@ function SceneLighting({ lightX, lightY, lightZ, sunColorHex, ambientIntensity, 
 
 function Scene({ timeOfDay }) {
   const { scene } = useThree();
+  const petalDataRef = useRef();
+  const rippleSimulatorRef = useRef();
 
   // Compute all solar parameters once per timeOfDay change
   const solar = useMemo(() => computeSolarParams(timeOfDay), [timeOfDay]);
@@ -384,6 +388,25 @@ function Scene({ timeOfDay }) {
       scene.fog.far = solar.fogFar;
     }
   }, [scene, solar.fogColor, solar.fogNear, solar.fogFar]);
+
+  // Ripple system configuration (must match petal spawn ranges from GommageText)
+  const rippleConfig = useMemo(() => ({
+    spawnMinX: -60,
+    spawnMaxX: 20,
+    spawnMinZ: -40,
+    spawnMaxZ: 40,
+  }), []);
+
+  // Set up petal-water interaction with ripple simulator
+  usePetalWaterInteraction(
+    petalDataRef,
+    (normalizedX, normalizedZ) => {
+      if (rippleSimulatorRef.current?.addDrop) {
+        rippleSimulatorRef.current.addDrop(normalizedX, normalizedZ);
+      }
+    },
+    rippleConfig
+  );
 
   return (
     <>
@@ -408,7 +431,12 @@ function Scene({ timeOfDay }) {
       <StarField timeOfDay={timeOfDay} />
       <Sun timeOfDay={timeOfDay} />
       <Moon timeOfDay={timeOfDay} />
-      <GommageText />
+      <GommageText ref={petalDataRef} timeOfDay={timeOfDay} />
+      <RippleSimulator
+        onReady={(api) => {
+          rippleSimulatorRef.current = api;
+        }}
+      />
       <CloudSky
         timeOfDay={timeOfDay}
         lightX={solar.lightX}
@@ -519,7 +547,9 @@ export default function OceanScene({ isModalOpen }) {
       });
 
       // After collapse animation completes, restore to normal CSS flow and fade slider back in
+      console.log('Setting up close animation timeout...');
       closeTimeoutRef.current = setTimeout(() => {
+        console.log('Close animation timeout fired, clearing styles', el.getAttribute('style'));
         // Explicitly remove all inline styles
         el.style.position = '';
         el.style.top = '';
@@ -534,6 +564,7 @@ export default function OceanScene({ isModalOpen }) {
         el.style.transition = '';
         el.style.transformOrigin = '';
 
+        console.log('After clearing:', el.getAttribute('style'));
         homeRectRef.current = null;
         setSliderVisible(true);
         closeTimeoutRef.current = null;

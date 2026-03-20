@@ -3,7 +3,7 @@
 // Two shader systems: TEXT (dissolution + glow), PETAL (instanced rose-curve billboards).
 
 export const GOMMAGE_CONFIG = {
-  maxPetals: 1200,
+  maxPetals: 150,
   cycleSeconds: 10.0,
 };
 
@@ -77,100 +77,135 @@ export const TEXT_FRAG = /* glsl */ `
 // ─── PETAL PARTICLE SHADERS ──────────────────────────────────────────────────
 
 export const PETAL_VERT = /* glsl */ `
-  attribute float aLifeOffset;
-  attribute float aPetalType;
+  // Per-instance attributes (new: replacing phase-based spawning with explicit birth time)
+  attribute vec3  aSpawnPos;       // World spawn position
+  attribute vec4  aBirthLifeSeedScale; // [birthTime, lifeDuration, seed [0,1], scale]
   attribute float aColorIndex;
-  attribute float aRotationSeed;
 
+  // Uniforms
   uniform float uTime;
-  uniform float uPhase;
   uniform vec2  uWindDir;
   uniform float uWindSpeed;
   uniform float uWindGustStrength;
   uniform float uWindGustFreq;
 
+  // Varyings
   varying float vAlpha;
   varying float vColorIndex;
-  varying float vPetalType;
-  varying vec2  vUv;
+  varying vec3  vNormal; // For diffuse lighting in fragment shader
 
-  // Smoothstep helper (emulate GLSL smoothstep)
+  // Utility: simple 3D rotation matrices (GLSL column-major order)
+  mat3 rotateX(float angle) {
+    float c = cos(angle), s = sin(angle);
+    return mat3(
+      1.0, 0.0, 0.0,
+      0.0, c, s,      // column 1: [0, c, s]
+      0.0, -s, c      // column 2: [0, -s, c]
+    );
+  }
+
+  mat3 rotateY(float angle) {
+    float c = cos(angle), s = sin(angle);
+    return mat3(
+      c, 0.0, -s,     // column 0: [c, 0, -s]
+      0.0, 1.0, 0.0,  // column 1: [0, 1, 0]
+      s, 0.0, c       // column 2: [s, 0, c]
+    );
+  }
+
+  mat3 rotateZ(float angle) {
+    float c = cos(angle), s = sin(angle);
+    return mat3(
+      c, s, 0.0,      // column 0: [c, s, 0]
+      -s, c, 0.0,     // column 1: [-s, c, 0]
+      0.0, 0.0, 1.0   // column 2: [0, 0, 1]
+    );
+  }
+
+  // Simple noise function for turbulence
+  float noise(vec3 p) {
+    return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453);
+  }
+
+  // Smoothstep
   float ss(float edge0, float edge1, float x) {
     float t = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
     return t * t * (3.0 - 2.0 * t);
   }
 
-  // Wind displacement: primary direction + gusts + per-petal turbulence
-  vec2 windDisplace(float localT, float seed, float t) {
-    // Time elapsed in this petal's lifecycle (5s total)
-    float elapsed = localT * 5.0;
-
-    // 1. Primary wind: left to right
-    vec2 primary = uWindDir * uWindSpeed * elapsed;
-
-    // 2. Gentle gust: slow sinusoidal speed variation
-    float gustPhase = t * uWindGustFreq * 6.2832 + seed * 3.14159;
-    float gustFactor = 0.7 + 0.3 * (0.5 + 0.5 * sin(gustPhase)) * uWindGustStrength * 2.0;
-    primary *= gustFactor;
-
-    // 3. Turbulence: per-petal sinusoidal wobble
-    float turbX = sin(localT * 2.8 + seed * 6.2832 + t * 0.4) * 2.0
-                + sin(localT * 5.1 + seed * 3.7   + t * 0.9) * 0.8;
-    float turbY = cos(localT * 2.1 + seed * 5.1   + t * 0.3) * 1.0
-                + cos(localT * 4.3 + seed * 2.8   + t * 0.7) * 0.4;
-
-    return primary + vec2(turbX, turbY);
-  }
-
   void main() {
-    vUv = uv;
     vColorIndex = aColorIndex;
-    vPetalType = aPetalType;
 
-    // Lifecycle: continuous spawning with wrapping phase
-    // aLifeOffset ∈ [0, 1] stagger birth; uPhase cycles continuously
-    // Petals born when uPhase crosses aLifeOffset, live for ~1.0 phase units
-    float localT = fract(uPhase - aLifeOffset);
-    localT = clamp(localT * 1.2, 0.0, 1.0); // scale to ensure full arc
+    // Extract per-instance data
+    float birthTime = aBirthLifeSeedScale.x;
+    float lifeDuration = aBirthLifeSeedScale.y;
+    float seed = aBirthLifeSeedScale.z;
+    float scale = aBirthLifeSeedScale.w;
 
-    // Fade in [0, 0.1], fade out [0.8, 1.0]
-    vAlpha = localT < 0.1
-      ? ss(0.0, 0.1, localT)
-      : ss(1.0, 0.8, localT);
+    // Calculate age (0 at birth, 1 at death, repeats)
+    float age = mod(uTime - birthTime, lifeDuration) / lifeDuration;
 
-    // World position from instance matrix
-    vec3 center = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    // Fade in and out
+    float fadeIn = ss(0.0, 0.05, age);
+    float fadeOut = 1.0 - ss(0.8, 1.0, age);
+    vAlpha = fadeIn * fadeOut;
 
-    // Wind physics: replaces static aDriftSeed with dynamic wind displacement
-    vec2 windDisp = windDisplace(localT, aRotationSeed, uTime);
-    center.x += windDisp.x;
-    center.y += windDisp.y;
+    // Start with object-space position and normal
+    vec3 pos = position;
+    vec3 norm = normal;
 
-    // Gravity: 1.2 world units/s²
-    float drop = 0.5 * 1.2 * localT * localT;
+    // === Tip bending ===
+    // Rotate around X axis, weighted by uv.y (tip bends more)
+    float bendAngle = 2.5 * sin(age * 6.2832 + seed * 6.2832);
+    float bendWeight = pow(max(uv.y, 0.0), 3.0); // tip = 1.0, base = 0.0
+    float actualBend = bendAngle * bendWeight;
+    mat3 bendRot = rotateX(actualBend);
+    pos = bendRot * pos;
+    norm = bendRot * norm;
 
-    // Upward burst at birth (peaks at localT=0.15, fades by 0.3)
-    float burst = 1.5 * ss(0.0, 0.15, localT) * (1.0 - ss(0.1, 0.3, localT));
+    // === 3D Spin ===
+    // Time-modulated rotation angles with seed randomization
+    float rngBase = seed;
+    float ry = rngBase * 6.2832 + age * uTime * 0.9;
+    float rx = (rngBase + 0.3) * 6.2832 + age * uTime * 1.2;
+    float rz = (rngBase + 0.7) * 6.2832 + age * uTime * 0.7;
 
-    // Apply gravity pull (wind is applied before burst/gravity)
-    center.y += burst - drop;
+    mat3 spinRot = rotateZ(rz) * rotateX(rx) * rotateY(ry);
+    pos = spinRot * pos;
+    norm = spinRot * norm;
 
-    // Billboard toward camera
-    vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
-    vec3 up    = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+    // === Wind & Turbulence ===
+    float windTime = age * lifeDuration;
+    vec2 windDisp = uWindDir * uWindSpeed * windTime;
 
-    // Spin: aRotationSeed encodes initial angle and angular velocity direction
-    float spinDir = sign(aRotationSeed - 0.5);
-    float omega   = 1.5 + abs(aRotationSeed) * 2.5; // 1.5–4 rad/s
-    float angle   = aRotationSeed * 6.2832 + spinDir * omega * localT;
+    // Gusts
+    float gustPhase = uTime * uWindGustFreq * 6.2832 + seed * 3.14159;
+    float gustFactor = 0.7 + 0.3 * (0.5 + 0.5 * sin(gustPhase));
+    windDisp *= gustFactor;
 
-    float cosA = cos(angle);
-    float sinA = sin(angle);
-    vec3 rotRight = right * cosA - up * sinA;
-    vec3 rotUp    = right * sinA + up * cosA;
+    // Turbulent swirl
+    float turbX = sin(age * 2.8 + seed * 6.2832 + uTime * 0.4) * 1.5
+                + sin(age * 5.1 + seed * 3.7 + uTime * 0.9) * 0.5;
+    float turbY = cos(age * 2.1 + seed * 5.1 + uTime * 0.3) * 0.8
+                + cos(age * 4.3 + seed * 2.8 + uTime * 0.7) * 0.3;
+    windDisp += vec2(turbX, turbY);
 
-    float scale = 0.8 + aRotationSeed * 0.5; // 0.8–1.3 world units
-    vec3 worldPos = center + (rotRight * position.x + rotUp * position.y) * scale;
+    // Apply scale
+    pos *= scale;
+
+    // Transform to world space: spawn position + wind/gravity displacement
+    vec3 worldPos = aSpawnPos + vec3(windDisp.x, windDisp.y, 0.0) + pos;
+
+    // Gravity: petals fall over their lifetime
+    float gravityAmount = 0.5 * 1.2 * (age * lifeDuration) * (age * lifeDuration);
+    worldPos.y -= gravityAmount;
+
+    // Upward burst at birth
+    float burst = 1.5 * ss(0.0, 0.15, age) * (1.0 - ss(0.1, 0.3, age));
+    worldPos.y += burst;
+
+    // Transform normal to world space (since we only applied object-space rotations)
+    vNormal = normalize(norm);
 
     gl_Position = projectionMatrix * viewMatrix * vec4(worldPos, 1.0);
   }
@@ -181,54 +216,26 @@ export const PETAL_FRAG = /* glsl */ `
 
   varying float vAlpha;
   varying float vColorIndex;
-  varying float vPetalType;
-  varying vec2  vUv;
+  varying vec3  vNormal;
 
   void main() {
-    // Transform UV to [-1, 1] centered
-    vec2 p = vUv * 2.0 - 1.0;
-    float r = length(p);
-    float theta = atan(p.y, p.x);
-
-    // Petal shape via rose curves in polar coordinates
-    float inside;
-
-    if (vPetalType < 0.5) {
-      // Type 0: cardioid (true single teardrop lobe)
-      // r = 0.5 * (1 + cos(theta))
-      float pR = max(0.5 * (1.0 + cos(theta)), 0.001);
-      inside = smoothstep(pR + 0.05, pR - 0.05, r);
-
-    } else if (vPetalType < 1.5) {
-      // Type 1: 4-petal rose, k=2
-      // r = |cos(2θ)|
-      float pR = max(abs(cos(2.0 * theta)), 0.001);
-      inside = smoothstep(pR + 0.05, pR - 0.05, r);
-
-    } else if (vPetalType < 2.5) {
-      // Type 2: 6-petal rose, k=3
-      // r = |cos(3θ)|
-      float pR = max(abs(cos(3.0 * theta)), 0.001);
-      inside = smoothstep(pR + 0.05, pR - 0.05, r);
-
-    } else {
-      // Type 3: 3-lobe elongated, k=1.5
-      // r = |cos(1.5θ)|
-      float pR = max(abs(cos(1.5 * theta)), 0.001);
-      inside = smoothstep(pR + 0.05, pR - 0.05, r);
-    }
-
     // Sample Ghibli palette from DataTexture
     // vColorIndex ∈ [0, 7] (float-encoded integer)
     float u = (floor(vColorIndex) + 0.5) / 8.0;
     vec3 petalColor = texture2D(uPalette, vec2(u, 0.5)).rgb;
 
-    // Radial gradient: lighter center, richer saturated edge
-    float radialGrad = 1.0 - smoothstep(0.0, 0.9, r);
-    petalColor = clamp(mix(petalColor * 1.3, petalColor, radialGrad), 0.0, 1.0);
+    // Subtle diffuse lighting to add depth without desaturating colors
+    // Light direction: pointing from upper-right-back
+    vec3 lightDir = normalize(vec3(1.0, 1.0, 0.5));
+    float diffuse = abs(dot(vNormal, lightDir));
+    // Use a minimal lighting effect to keep colors saturated
+    float lighting = 0.95 + diffuse * 0.1; // Range [0.95, 1.05]
 
-    float alpha = inside * vAlpha;
+    petalColor *= lighting;
+    // Saturate colors slightly for more vibrance
+    petalColor = mix(petalColor, normalize(petalColor) * length(petalColor), 0.15);
 
+    float alpha = vAlpha;
     if (alpha < 0.01) discard;
 
     gl_FragColor = vec4(petalColor, alpha);

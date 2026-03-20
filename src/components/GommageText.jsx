@@ -1,5 +1,6 @@
-import { useRef, useMemo, useEffect } from 'react';
+import { useRef, useMemo, useEffect, forwardRef } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { PETAL_VERT, PETAL_FRAG, GOMMAGE_CONFIG } from '../shaders/gommage';
 
@@ -8,12 +9,12 @@ const { maxPetals } = GOMMAGE_CONFIG;
 // ─── Ghibli Color Palette ────────────────────────────────────────────────────
 
 const PETAL_PALETTE = [
-  [0xf4, 0xa7, 0xb9], // 0: soft pink
+  [0xff, 0x4d, 0x6d], // 0: vibrant red
   [0xff, 0xd1, 0xa9], // 1: peach/apricot
   [0xc8, 0xe6, 0xc9], // 2: mint green
   [0xb3, 0x9d, 0xdb], // 3: lavender
   [0xff, 0xe0, 0x82], // 4: warm yellow
-  [0xf4, 0x8f, 0xb1], // 5: rose
+  [0xf4, 0x3a, 0x60], // 5: deep rose/red
   [0x80, 0xcb, 0xc4], // 6: teal mint
   [0xff, 0xcc, 0x80], // 7: warm amber
 ];
@@ -29,49 +30,50 @@ function makeRng(seed) {
 
 function buildPetalData(count, seed) {
   const rng = makeRng(seed);
-  const matrices = new Float32Array(count * 16);
-  const lifeOffsets = new Float32Array(count);
-  const petalTypes = new Float32Array(count);
-  const colorIndices = new Float32Array(count);
-  const rotationSeeds = new Float32Array(count);
 
-  const dummy = new THREE.Object3D();
+  const spawnPositions = new Float32Array(count * 3);
+  const birthLifeSeedScale = new Float32Array(count * 4); // [birthTime, lifeDuration, seed, scale]
+  const colorIndices = new Float32Array(count);
+
+  const lifeDuration = 6.0; // Each petal lives for 6 seconds
 
   for (let i = 0; i < count; i++) {
-    // Spawn position: petals start left off-screen, blow rightward
-    // Wind physics in the shader handles the drift
-    const rx = rng() * 80 - 60;   // x ∈ [-60, 20] — start left, blow right
+    // Spawn position: petals start in the scene, distributed throughout
+    const rx = rng() * 80 - 60;   // x ∈ [-60, 20] — left off-screen, blown right
     const ry = rng() * 30 + 15;   // y ∈ [15, 45]  — high in scene
-    const rz = rng() * 80 - 40;   // z ∈ [-40, 40] — spread depth
-    dummy.position.set(rx, ry, rz);
-    dummy.updateMatrix();
-    dummy.matrix.toArray(matrices, i * 16);
+    const rz = rng() * 80 - 40;   // z ∈ [-40, 40] — spread in depth
+    spawnPositions[i * 3]     = rx;
+    spawnPositions[i * 3 + 1] = ry;
+    spawnPositions[i * 3 + 2] = rz;
 
-    // Life offset: [0, 1] for continuous spawning
-    lifeOffsets[i] = rng();
+    // Birth time: stagger births so petals spawn continuously
+    // Spread births evenly across the first 6 seconds to create continuous stream
+    const birthTime = (i / count) * lifeDuration;
+    const seedVal = rng();
+    const scaleVal = 0.5 + rng() * 0.5; // Scale ∈ [0.5, 1.0]
 
-    // Petal type: 0–3
-    petalTypes[i] = Math.floor(rng() * 4);
+    birthLifeSeedScale[i * 4]     = birthTime;
+    birthLifeSeedScale[i * 4 + 1] = lifeDuration;
+    birthLifeSeedScale[i * 4 + 2] = seedVal;
+    birthLifeSeedScale[i * 4 + 3] = scaleVal;
 
     // Color index: 0–7
     colorIndices[i] = Math.floor(rng() * 8);
-
-    // Rotation seed: [0, 1] also used as turbulence phase seed in wind shader
-    rotationSeeds[i] = rng();
   }
 
-  return { matrices, lifeOffsets, petalTypes, colorIndices, rotationSeeds };
+  return { spawnPositions, birthLifeSeedScale, colorIndices };
 }
 
-// ─── GommageText Component (Ambient Petal Particles) ────────────────────────────
+// ─── GommageText Component (3D Petal Particles) ──────────────────────────────
 
-export default function GommageText() {
+const GommageText = forwardRef(({ timeOfDay }, ref) => {
   const petalMeshRef = useRef();
+  const petalDataRef = useRef(); // Separate ref to expose petal data without interfering with mesh ref
+  const { nodes } = useGLTF('/models/petal.glb');
 
   // Uniforms refs — stable objects passed to ShaderMaterial
   const petalUniforms = useRef({
     uTime: { value: 0 },
-    uPhase: { value: 0 },
     uPalette: { value: null },
     uWindDir: { value: new THREE.Vector2(1.0, 0.0) },
     uWindSpeed: { value: 4.0 },
@@ -100,16 +102,20 @@ export default function GommageText() {
 
   const petalData = useMemo(() => buildPetalData(maxPetals, 42), []);
 
-  // ── Petal geometry: PlaneGeometry(1,1) + InstancedBufferAttributes ──────────
+  // ── Petal geometry: Clone from GLB + InstancedBufferAttributes ──────────────
 
   const petalGeo = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(1, 1);
-    geo.setAttribute('aLifeOffset',   new THREE.InstancedBufferAttribute(petalData.lifeOffsets,   1));
-    geo.setAttribute('aPetalType',    new THREE.InstancedBufferAttribute(petalData.petalTypes,    1));
-    geo.setAttribute('aColorIndex',   new THREE.InstancedBufferAttribute(petalData.colorIndices,  1));
-    geo.setAttribute('aRotationSeed', new THREE.InstancedBufferAttribute(petalData.rotationSeeds, 1));
+    if (!nodes?.PetalV2?.geometry) return null;
+
+    const geo = nodes.PetalV2.geometry.clone();
+
+    // Add per-instance attributes
+    geo.setAttribute('aSpawnPos', new THREE.InstancedBufferAttribute(petalData.spawnPositions, 3));
+    geo.setAttribute('aBirthLifeSeedScale', new THREE.InstancedBufferAttribute(petalData.birthLifeSeedScale, 4));
+    geo.setAttribute('aColorIndex', new THREE.InstancedBufferAttribute(petalData.colorIndices, 1));
+
     return geo;
-  }, [petalData]);
+  }, [nodes, petalData]);
 
   // ── Petal material ──────────────────────────────────────────────────────────
 
@@ -119,22 +125,8 @@ export default function GommageText() {
     uniforms: petalUniforms.current,
     transparent: true,
     depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending, // Switch from AdditiveBlending to show true colors
   }), []);
-
-  // ── Upload instance matrices ────────────────────────────────────────────────
-
-  useEffect(() => {
-    const mesh = petalMeshRef.current;
-    if (!mesh) return;
-
-    const m4 = new THREE.Matrix4();
-    for (let i = 0; i < maxPetals; i++) {
-      m4.fromArray(petalData.matrices, i * 16);
-      mesh.setMatrixAt(i, m4);
-    }
-    mesh.instanceMatrix.needsUpdate = true;
-  }, [petalData.matrices]);
 
   // ── Link palette texture to uniforms ────────────────────────────────────────
 
@@ -142,35 +134,81 @@ export default function GommageText() {
     petalUniforms.current.uPalette.value = paletteTexture;
   }, [paletteTexture]);
 
+  // ── Initialize instance matrices (identity, since positioning is in shader) ──
+
+  useEffect(() => {
+    const mesh = petalMeshRef.current;
+    if (!mesh) return;
+
+    const m4 = new THREE.Matrix4();
+    for (let i = 0; i < maxPetals; i++) {
+      m4.identity(); // Identity matrix for all instances
+      mesh.setMatrixAt(i, m4);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  }, []);
+
   // ── Dispose GPU resources on unmount ────────────────────────────────────────
 
   useEffect(() => {
     return () => {
-      petalGeo.dispose();
+      petalGeo?.dispose();
       petalMat.dispose();
       paletteTexture.dispose();
     };
   }, [petalGeo, petalMat, paletteTexture]);
 
-  // ── Per-frame: continuous petal animation ──────────────────────────────────
+  // ── Per-frame: Update uTime uniform ──────────────────────────────────────────
 
   useFrame((_, delta) => {
-    // Continuous animation: uPhase cycles from 0 to 1 continuously
-    // All petals visible all the time, with continuous life cycling
     petalUniforms.current.uTime.value += delta;
 
-    // uPhase drives the particle lifecycle in a repeating pattern
-    // Based on uTime, petals spawn continuously
-    const phase = (petalUniforms.current.uTime.value % 5.0) / 5.0; // 5-second lifecycle cycle
-    petalUniforms.current.uPhase.value = phase;
-
-    // All petals visible at all times
     if (petalMeshRef.current) {
       petalMeshRef.current.count = maxPetals;
     }
   });
 
+  // Expose petal data for CPU-side tracking via forwardRef
+  useEffect(() => {
+    if (ref) {
+      if (typeof ref === 'function') {
+        ref({
+          petalData,
+          petalUniforms: petalUniforms.current,
+          meshRef: petalMeshRef,
+        });
+      } else {
+        ref.current = {
+          petalData,
+          petalUniforms: petalUniforms.current,
+          meshRef: petalMeshRef,
+        };
+      }
+    }
+  }, [petalData, ref]);
+
   // ── Render ──────────────────────────────────────────────────────────────────
+
+  if (!petalGeo) return null;
+
+  // Show petals during the wedding reception (5:00 PM to 6:00 PM, or timeOfDay prop if provided)
+  let shouldShowPetals = true;
+  if (timeOfDay !== undefined) {
+    shouldShowPetals = timeOfDay >= 17 && timeOfDay < 18; // 5 PM to 6 PM
+  } else {
+    // Fall back to system time if timeOfDay prop not provided
+    const now = new Date();
+    const hour = now.getHours();
+    const minutes = now.getMinutes();
+    const currentTimeInMinutes = hour * 60 + minutes;
+    const startTime = 17 * 60; // 5:00 PM (17:00)
+    const endTime = 18 * 60;   // 6:00 PM (18:00)
+    shouldShowPetals = currentTimeInMinutes >= startTime && currentTimeInMinutes < endTime;
+  }
+
+  if (!shouldShowPetals) {
+    return null;
+  }
 
   return (
     <instancedMesh
@@ -179,4 +217,11 @@ export default function GommageText() {
       frustumCulled={false}
     />
   );
-}
+});
+
+GommageText.displayName = 'GommageText';
+
+export default GommageText;
+
+// Preload the GLB asset
+useGLTF.preload('/models/petal.glb');
