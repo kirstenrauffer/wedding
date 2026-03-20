@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
+import { useMemo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   EffectComposer,
@@ -19,10 +19,8 @@ import Moon from './Moon';
 import Sun from './Sun';
 import Slider from './Slider';
 import GommageText from './GommageText';
-import RippleSimulator from './RippleSimulator';
 import Fireworks from './Fireworks';
 import { computeSolarParams } from '../utils/solar';
-import { usePetalWaterInteraction } from '../hooks/usePetalWaterInteraction';
 import { KuwaharaEffect } from '../effects/KuwaharaEffect';
 import { MOON_WORLD_POSITION, MOON_LIGHT_DIRECTION } from '../constants/scene';
 
@@ -48,15 +46,7 @@ const smoothstep = (edge0, edge1, x) => {
   return t * t * (3 - 2 * t);
 };
 
-function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightIntensity, moonColorHex, skyHorizonHex, rippleNormalMap, rippleConfig }) {
-
-  // Ref to hold current rippleNormalMap (updated via effect, used in onBeforeCompile)
-  const rippleNormalMapRef = useRef(null);
-
-  // Keep ref in sync with prop
-  useEffect(() => {
-    rippleNormalMapRef.current = rippleNormalMap;
-  }, [rippleNormalMap]);
+function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightIntensity, moonColorHex, skyHorizonHex }) {
 
   // Compute water color based on sky colors and time of day
   // Water reflects the sky, so use the horizon/mid sky colors but darker and more saturated
@@ -157,50 +147,6 @@ function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightI
       alpha: 1.0,
     });
     w.rotation.x = -Math.PI / 2;
-
-    // Inject ripple normals with alpha guard to avoid flattening water
-    w.material.onBeforeCompile = (shader) => {
-      // Create placeholder texture (1x1 neutral normal) for initialization
-      // Will be replaced with actual ripple normal map when RippleSimulator is ready
-      const placeholderData = new Uint8Array([127, 127, 255, 255]); // neutral normal (0, 0, 1) encoded
-      const placeholderTexture = new THREE.DataTexture(placeholderData, 1, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
-      placeholderTexture.needsUpdate = true;
-      shader.uniforms.uRippleNormals   = { value: rippleNormalMapRef.current || placeholderTexture };
-      shader.uniforms.uRippleIntensity = { value: 0.6 };
-      shader.uniforms.uRippleMinX      = { value: -60 };
-      shader.uniforms.uRippleMaxX      = { value:  20 };
-      shader.uniforms.uRippleMinZ      = { value: -40 };
-      shader.uniforms.uRippleMaxZ      = { value:  40 };
-
-      shader.fragmentShader = shader.fragmentShader.replace(
-        'uniform vec3 waterColor;',
-        `uniform vec3 waterColor;
-uniform sampler2D uRippleNormals;
-uniform float uRippleIntensity;
-uniform float uRippleMinX;
-uniform float uRippleMaxX;
-uniform float uRippleMinZ;
-uniform float uRippleMaxZ;`
-      );
-
-      const surfaceNormalLine = 'vec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) );';
-      shader.fragmentShader = shader.fragmentShader.replace(
-        surfaceNormalLine,
-        `${surfaceNormalLine}
-    {
-      vec2 rippleUV = vec2(
-        (worldPosition.x - uRippleMinX) / (uRippleMaxX - uRippleMinX),
-        (worldPosition.z - uRippleMinZ) / (uRippleMaxZ - uRippleMinZ)
-      );
-      vec4 rippleData = texture2D(uRippleNormals, rippleUV);
-      if (rippleData.a > 0.01) {
-        vec3 rippleN = rippleData.xyz * 2.0 - 1.0;
-        surfaceNormal = normalize(surfaceNormal + rippleN.xzy * uRippleIntensity);
-      }
-    }`
-      );
-    };
-
     return w;
   }, [waterNormals]);
 
@@ -213,22 +159,11 @@ uniform float uRippleMaxZ;`
     if (water.material.uniforms.size) {
       water.material.uniforms.size.value = waterDistortion;
     }
-
-    if (rippleConfig && water.material.uniforms.uRippleMinX) {
-      water.material.uniforms.uRippleMinX.value = rippleConfig.spawnMinX;
-      water.material.uniforms.uRippleMaxX.value = rippleConfig.spawnMaxX;
-      water.material.uniforms.uRippleMinZ.value = rippleConfig.spawnMinZ;
-      water.material.uniforms.uRippleMaxZ.value = rippleConfig.spawnMaxZ;
-    }
-  }, [water, waterSunColor, waterSunDirection, waterColorHex, waterDistortion, rippleConfig]);
+  }, [water, waterSunColor, waterSunDirection, waterColorHex, waterDistortion]);
 
   useFrame((_, delta) => {
     if (water?.material?.uniforms?.time) {
       water.material.uniforms.time.value += delta * 0.3;
-    }
-    // Keep ripple uniform updated every frame in case it changes
-    if (water?.material?.uniforms?.uRippleNormals && rippleNormalMapRef.current) {
-      water.material.uniforms.uRippleNormals.value = rippleNormalMapRef.current;
     }
   });
 
@@ -434,8 +369,6 @@ function SceneLighting({ lightX, lightY, lightZ, sunColorHex, ambientIntensity, 
 function Scene({ timeOfDay }) {
   const { scene } = useThree();
   const petalDataRef = useRef();
-  const rippleSimulatorRef = useRef();
-  const [rippleNormalMap, setRippleNormalMap] = useState(null);
 
   // Compute all solar parameters once per timeOfDay change
   const solar = useMemo(() => computeSolarParams(timeOfDay), [timeOfDay]);
@@ -452,31 +385,7 @@ function Scene({ timeOfDay }) {
     }
   }, [scene, solar.fogColor, solar.fogNear, solar.fogFar]);
 
-  // Ripple system configuration (must match petal spawn ranges from GommageText)
-  const rippleConfig = useMemo(() => ({
-    spawnMinX: -60,
-    spawnMaxX: 20,
-    spawnMinZ: -40,
-    spawnMaxZ: 40,
-  }), []);
-
-  // Memoize the ripple simulator onReady callback to prevent infinite loops
-  const handleRippleReady = useCallback((api) => {
-    rippleSimulatorRef.current = api;
-    setRippleNormalMap(api.getNormalMap());
-  }, []);
-
-  // Set up petal-water interaction with ripple simulator
-  usePetalWaterInteraction(
-    petalDataRef,
-    (normalizedX, normalizedZ) => {
-      if (rippleSimulatorRef.current?.addDrop) {
-        rippleSimulatorRef.current.addDrop(normalizedX, normalizedZ);
-      }
-    },
-    rippleConfig,
-    timeOfDay
-  );
+  // Petal-water interaction disabled (petals no longer fall into ocean)
 
   return (
     <>
@@ -503,7 +412,6 @@ function Scene({ timeOfDay }) {
       <Moon timeOfDay={timeOfDay} />
       <Fireworks timeOfDay={timeOfDay} />
       <GommageText ref={petalDataRef} timeOfDay={timeOfDay} />
-      <RippleSimulator onReady={handleRippleReady} />
       <CloudSky
         timeOfDay={timeOfDay}
         lightX={solar.lightX}
@@ -527,8 +435,6 @@ function Scene({ timeOfDay }) {
         moonLightIntensity={solar.moonLightIntensity}
         moonColorHex={solar.moonColorHex}
         skyHorizonHex={solar.skyHorizonHex}
-        rippleNormalMap={rippleNormalMap}
-        rippleConfig={rippleConfig}
       />
       <PostProcessing timeOfDay={timeOfDay} />
     </>
