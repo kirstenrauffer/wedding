@@ -35,7 +35,8 @@ export default function RippleSimulator({ onReady, disabled = false }) {
   useEffect(() => {
     if (disabled) return;
 
-    // Create two render targets for ping-pong simulation
+    // Create three render targets to avoid feedback loops
+    // We need 3 buffers: current, previous, and output
     const rt1 = new THREE.WebGLRenderTarget(RESOLUTION, RESOLUTION, {
       type: THREE.FloatType,
       format: THREE.RGFormat,
@@ -54,7 +55,16 @@ export default function RippleSimulator({ onReady, disabled = false }) {
       wrapT: THREE.RepeatWrapping,
     });
 
-    rtPair.current = { current: rt1, prev: rt2 };
+    const rt3 = new THREE.WebGLRenderTarget(RESOLUTION, RESOLUTION, {
+      type: THREE.FloatType,
+      format: THREE.RGFormat,
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      wrapS: THREE.RepeatWrapping,
+      wrapT: THREE.RepeatWrapping,
+    });
+
+    rtPair.current = { current: rt1, prev: rt2, next: rt3 };
 
     // Create normal map render target
     const rtNormal = new THREE.WebGLRenderTarget(RESOLUTION, RESOLUTION, {
@@ -162,7 +172,7 @@ export default function RippleSimulator({ onReady, disabled = false }) {
       `,
     });
 
-    materials.current = { simulation: simulationShader, normal: normalShader };
+    materials.current = { simulation: simulationShader, normal: normalShader, rtNormal };
 
     // Call onReady callback with simulator interface
     if (onReady) {
@@ -186,6 +196,7 @@ export default function RippleSimulator({ onReady, disabled = false }) {
     return () => {
       rt1.dispose();
       rt2.dispose();
+      rt3.dispose();
       rtNormal.dispose();
       simulationShader.dispose();
       normalShader.dispose();
@@ -218,42 +229,33 @@ export default function RippleSimulator({ onReady, disabled = false }) {
       return;
     }
 
-    const { current: rtCurrent, prev: rtPrev } = rtPair.current;
+    const { current: rtCurrent, prev: rtPrev, next: rtNext } = rtPair.current;
     const simMat = materials.current.simulation;
     const normMat = materials.current.normal;
+    const rtNormal = materials.current.rtNormal;
 
-    // Update simulation material uniforms to reference current/prev heights
+    // 1. Simulation pass: wave equation
+    // Read from current and previous (no feedback loop - writing to different buffer)
     simMat.uniforms.u_currentHeight.value = rtCurrent.texture;
     simMat.uniforms.u_prevHeight.value = rtPrev.texture;
-
-    // Update quad mesh material for simulation pass
     quadMesh.current.material = simMat;
-
-    // Run simulation pass: render to rtPrev, read from rtCurrent + rtPrev
-    gl.setRenderTarget(rtPrev);
+    gl.setRenderTarget(rtNext);
     gl.clear();
     gl.render(quadScene.current, camera.current);
-
-    // Clear drop for next frame
     simMat.uniforms.u_dropRadius.value = 0;
 
-    // Update normal material to read from the new heightfield (rtPrev)
-    normMat.uniforms.u_heightfield.value = rtPrev.texture;
-
-    // Update quad mesh material for normal pass
+    // 2. Normal extraction pass: derive normals from just-simulated heights
+    normMat.uniforms.u_heightfield.value = rtNext.texture;
     quadMesh.current.material = normMat;
-
-    // Run normal extraction: render to rtCurrent (which now holds the normal map)
-    gl.setRenderTarget(rtCurrent);
+    gl.setRenderTarget(rtNormal);
     gl.clear();
     gl.render(quadScene.current, camera.current);
 
-    // Swap for next frame
-    rtPair.current.current = rtPrev;
+    // 3. Rotate buffers: next becomes current, current becomes prev, prev becomes next
+    rtPair.current.current = rtNext;
     rtPair.current.prev = rtCurrent;
-    normalMapRef.current = rtPrev.texture;
+    rtPair.current.next = rtPrev;
 
-    // Reset render target
     gl.setRenderTarget(null);
   });
 

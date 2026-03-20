@@ -224,16 +224,18 @@ export const PETAL_FRAG = /* glsl */ `
     float u = (floor(vColorIndex) + 0.5) / 8.0;
     vec3 petalColor = texture2D(uPalette, vec2(u, 0.5)).rgb;
 
-    // Subtle diffuse lighting to add depth without desaturating colors
+    // Minimize lighting effect to maximize color saturation
     // Light direction: pointing from upper-right-back
     vec3 lightDir = normalize(vec3(1.0, 1.0, 0.5));
     float diffuse = abs(dot(vNormal, lightDir));
-    // Use a minimal lighting effect to keep colors saturated
-    float lighting = 0.95 + diffuse * 0.1; // Range [0.95, 1.05]
+    // Use minimal lighting that only adds subtle depth
+    float lighting = 0.95 + diffuse * 0.08; // Range [0.95, 1.03]
 
     petalColor *= lighting;
-    // Saturate colors slightly for more vibrance
-    petalColor = mix(petalColor, normalize(petalColor) * length(petalColor), 0.15);
+    // Boost saturation by pushing toward the most saturated channel
+    float maxChannel = max(max(petalColor.r, petalColor.g), petalColor.b);
+    vec3 saturated = petalColor / (dot(petalColor, vec3(0.299, 0.587, 0.114)) + 0.001) * maxChannel;
+    petalColor = mix(petalColor, saturated, 0.4);
 
     float alpha = vAlpha;
     if (alpha < 0.01) discard;

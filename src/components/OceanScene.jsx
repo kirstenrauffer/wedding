@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useMemo, useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   EffectComposer,
@@ -47,7 +47,7 @@ const smoothstep = (edge0, edge1, x) => {
   return t * t * (3 - 2 * t);
 };
 
-function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightIntensity, moonColorHex, skyHorizonHex }) {
+function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightIntensity, moonColorHex, skyHorizonHex, rippleNormalMap, rippleConfig }) {
 
   // Compute water color based on sky colors and time of day
   // Water reflects the sky, so use the horizon/mid sky colors but darker and more saturated
@@ -75,10 +75,15 @@ function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightI
   // Check if sun is visible (6 AM to 6 PM)
   const isSunVisible = timeOfDay >= 6 && timeOfDay <= 18;
 
-  const waterNormals = useMemo(() => {
-    const tex = new THREE.TextureLoader().load('/textures/waternormals.jpg');
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    return tex;
+  const [waterNormals, setWaterNormals] = useState(null);
+
+  // Load water normals texture asynchronously
+  useEffect(() => {
+    const textureLoader = new THREE.TextureLoader();
+    textureLoader.load('/textures/waternormals.jpg', (tex) => {
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      setWaterNormals(tex);
+    });
   }, []);
 
   // Calculate night factor for smooth transition (0 = fully night, 1 = day)
@@ -93,11 +98,11 @@ function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightI
 
   // Water reflection direction: points to sun during day, moon light direction at night
   const waterSunDirection = useMemo(() => {
-    // During daytime (7 AM – 5 PM), track the moving sun for dynamic glint
-    if (nightFactor >= 1) {
+    // Use sun direction when there's significant daylight (nightFactor > 0.3)
+    if (nightFactor > 0.3) {
       return new THREE.Vector3(lightX, lightY, lightZ).normalize();
     }
-    // At dusk/night/dawn (5 PM – 7 AM), lock to the static moon light direction
+    // At deep night/dawn, lock to the static moon light direction
     // This prevents the "sweep" caused by simultaneous changes to both direction and lerp weight
     return moonLightDir.clone();
   }, [lightX, lightY, lightZ, nightFactor, moonLightDir]);
@@ -121,6 +126,9 @@ function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightI
   }, [nightFactor]);
 
   const water = useMemo(() => {
+    if (!waterNormals) {
+      return null;
+    }
     const geom = new THREE.PlaneGeometry(30000, 30000);
     const w = new Water(geom, {
       textureWidth: 256,
@@ -135,42 +143,72 @@ function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightI
     });
     w.rotation.x = -Math.PI / 2;
 
-    // Reduce star reflection intensity by scaling the reflection texture contribution
+    // Inject ripple normals with alpha guard to avoid flattening water
     w.material.onBeforeCompile = (shader) => {
-      shader.uniforms.uReflectionScale = { value: reflectionScale };
+      shader.uniforms.uRippleNormals   = { value: null };
+      shader.uniforms.uRippleIntensity = { value: 0.6 };
+      shader.uniforms.uRippleMinX      = { value: -60 };
+      shader.uniforms.uRippleMaxX      = { value:  20 };
+      shader.uniforms.uRippleMinZ      = { value: -40 };
+      shader.uniforms.uRippleMaxZ      = { value:  40 };
 
-      // Inject uniform for reflection scaling
       shader.fragmentShader = shader.fragmentShader.replace(
         'uniform vec3 waterColor;',
-        'uniform vec3 waterColor;\nuniform float uReflectionScale;'
+        `uniform vec3 waterColor;
+uniform sampler2D uRippleNormals;
+uniform float uRippleIntensity;
+uniform float uRippleMinX;
+uniform float uRippleMaxX;
+uniform float uRippleMinZ;
+uniform float uRippleMaxZ;`
       );
 
-      // Target the exact line from Water.js where reflections are used:
-      // This scales down reflection intensity to reduce star reflections at night
+      const surfaceNormalLine = 'vec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) );';
       shader.fragmentShader = shader.fragmentShader.replace(
-        'reflectionSample + specularLight, reflectance );',
-        '(reflectionSample * uReflectionScale) + specularLight, reflectance );'
+        surfaceNormalLine,
+        `${surfaceNormalLine}
+    {
+      vec2 rippleUV = vec2(
+        (worldPosition.x - uRippleMinX) / (uRippleMaxX - uRippleMinX),
+        (worldPosition.z - uRippleMinZ) / (uRippleMaxZ - uRippleMinZ)
+      );
+      vec4 rippleData = texture2D(uRippleNormals, rippleUV);
+      if (rippleData.a > 0.01) {
+        vec3 rippleN = rippleData.xyz * 2.0 - 1.0;
+        surfaceNormal = normalize(surfaceNormal + rippleN.xzy * uRippleIntensity);
+      }
+    }`
       );
     };
 
     return w;
-  }, [waterNormals, waterSunDirection, waterSunColor, waterColorHex, waterDistortion, reflectionScale]);
+  }, [waterNormals, waterSunDirection, waterSunColor, waterColorHex, waterDistortion, reflectionScale]); // rippleNormalMap/rippleConfig not included — they're null-init and updated via useEffect
 
   useEffect(() => {
+    if (!water?.material?.uniforms) return;
+
     water.material.uniforms.sunColor.value.copy(waterSunColor);
     water.material.uniforms.sunDirection.value.copy(waterSunDirection);
     water.material.uniforms.waterColor.value.set(waterColorHex);
-    if (water.material.uniforms.uReflectionScale) {
-      water.material.uniforms.uReflectionScale.value = reflectionScale;
+
+    if (water.material.uniforms.uRippleNormals && rippleNormalMap) {
+      water.material.uniforms.uRippleNormals.value = rippleNormalMap;
     }
-  }, [water.material.uniforms, waterSunColor, waterSunDirection, waterColorHex, reflectionScale]);
+    if (rippleConfig && water.material.uniforms.uRippleMinX) {
+      water.material.uniforms.uRippleMinX.value = rippleConfig.spawnMinX;
+      water.material.uniforms.uRippleMaxX.value = rippleConfig.spawnMaxX;
+      water.material.uniforms.uRippleMinZ.value = rippleConfig.spawnMinZ;
+      water.material.uniforms.uRippleMaxZ.value = rippleConfig.spawnMaxZ;
+    }
+  }, [water, waterSunColor, waterSunDirection, waterColorHex, rippleNormalMap, rippleConfig]);
 
   useFrame((_, delta) => {
-    if (water.material.uniforms.time) {
+    if (water?.material?.uniforms?.time) {
       water.material.uniforms.time.value += delta * 0.3;
     }
   });
 
+  if (!water) return null;
   return <primitive object={water} />;
 }
 
@@ -373,6 +411,7 @@ function Scene({ timeOfDay }) {
   const { scene } = useThree();
   const petalDataRef = useRef();
   const rippleSimulatorRef = useRef();
+  const [rippleNormalMap, setRippleNormalMap] = useState(null);
 
   // Compute all solar parameters once per timeOfDay change
   const solar = useMemo(() => computeSolarParams(timeOfDay), [timeOfDay]);
@@ -396,6 +435,12 @@ function Scene({ timeOfDay }) {
     spawnMinZ: -40,
     spawnMaxZ: 40,
   }), []);
+
+  // Memoize the ripple simulator onReady callback to prevent infinite loops
+  const handleRippleReady = useCallback((api) => {
+    rippleSimulatorRef.current = api;
+    setRippleNormalMap(api.getNormalMap());
+  }, []);
 
   // Set up petal-water interaction with ripple simulator
   usePetalWaterInteraction(
@@ -432,11 +477,7 @@ function Scene({ timeOfDay }) {
       <Sun timeOfDay={timeOfDay} />
       <Moon timeOfDay={timeOfDay} />
       <GommageText ref={petalDataRef} timeOfDay={timeOfDay} />
-      <RippleSimulator
-        onReady={(api) => {
-          rippleSimulatorRef.current = api;
-        }}
-      />
+      <RippleSimulator onReady={handleRippleReady} />
       <CloudSky
         timeOfDay={timeOfDay}
         lightX={solar.lightX}
@@ -460,6 +501,8 @@ function Scene({ timeOfDay }) {
         moonLightIntensity={solar.moonLightIntensity}
         moonColorHex={solar.moonColorHex}
         skyHorizonHex={solar.skyHorizonHex}
+        rippleNormalMap={rippleNormalMap}
+        rippleConfig={rippleConfig}
       />
       <PostProcessing timeOfDay={timeOfDay} />
     </>
