@@ -17,10 +17,10 @@ export default function RippleSimulator({ onReady, disabled = false }) {
   const dropQueue = useRef([]);
 
   const RESOLUTION = 256;
-  const DAMPING = 0.96; // Wave energy loss per frame (higher = more persistence)
+  const DAMPING = 0.985; // Wave energy loss per frame (higher = faster decay, less turbulent)
   const RIPPLE_RADIUS = 0.08; // UV-space radius of ripple splat (larger = wider ripples)
-  const RIPPLE_FORCE = 0.8; // Amplitude of initial displacement (higher = stronger ripples)
-  const NORMAL_STRENGTH = 2.0; // Exaggeration factor for normal extraction (higher = more visible)
+  const RIPPLE_FORCE = 0.6; // Amplitude of initial displacement (reduced from 0.8)
+  const NORMAL_STRENGTH = 1.5; // Exaggeration factor for normal extraction (reduced from 2.0)
 
   // Create fullscreen quad geometry (only once)
   useEffect(() => {
