@@ -199,14 +199,14 @@ export const PETAL_VERT = /* glsl */ `
     pos *= scale;
     windDisp *= scale;
 
-    // Transform to world space: spawn position + wind/gravity displacement
+    // Transform to world space: spawn position + wind displacement
     vec3 worldPos = aSpawnPos + vec3(windDisp.x, windDisp.y, 0.0) + pos;
 
-    // Gravity: petals fall over their lifetime
-    float gravityAmount = 1.5 * (age * lifeDuration) * (age * lifeDuration);
-    worldPos.y -= gravityAmount;
+    // Gentle floating motion: slight rise and fall to keep petals dancing in the air
+    float floatBob = sin(age * 3.5 + seed * 6.2832) * 2.0;
+    worldPos.y += floatBob;
 
-    // Upward burst at birth
+    // Upward lift at birth
     float burst = 1.5 * ss(0.0, 0.15, age) * (1.0 - ss(0.1, 0.3, age));
     worldPos.y += burst;
 

@@ -76,7 +76,7 @@ const GommageText = forwardRef(({ timeOfDay }, ref) => {
     uTime: { value: 0 },
     uPalette: { value: null },
     uWindDir: { value: new THREE.Vector2(1.0, 0.0) },
-    uWindSpeed: { value: 4.0 },
+    uWindSpeed: { value: 12.0 },
     uWindGustStrength: { value: 0.35 },
     uWindGustFreq: { value: 0.12 },
   });
