@@ -97,6 +97,8 @@ const formatTimeOfDay = (hours) => {
 
 export default function Slider({ min = 0, max = 100, value, onChange, step = 1 }) {
   const timelineRef = useRef(null);
+  const containerRef = useRef(null);
+  const touchStartRef = useRef(null);
   const [isMobile, setIsMobile] = useState(() =>
     window.matchMedia('(max-width: 768px)').matches
   );
@@ -107,6 +109,48 @@ export default function Slider({ min = 0, max = 100, value, onChange, step = 1 }
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
+
+  // Handle touch scrolling on mobile
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !isMobile) return;
+
+    const handleTouchStart = (e) => {
+      touchStartRef.current = e.touches[0].clientY;
+    };
+
+    const handleTouchMove = (e) => {
+      if (touchStartRef.current === null) return;
+
+      const currentY = e.touches[0].clientY;
+      const deltaY = currentY - touchStartRef.current;
+
+      // Mobile slider is vertical: scrolling down increases value, up decreases
+      // Each pixel of movement = 0.1 hours (6 minutes)
+      const pixelsPerHour = 4; // Adjust sensitivity as needed
+      const hoursDelta = deltaY / pixelsPerHour;
+
+      if (onChange) {
+        onChange(Math.max(min, Math.min(max, value - hoursDelta)));
+      }
+
+      touchStartRef.current = currentY;
+    };
+
+    const handleTouchEnd = () => {
+      touchStartRef.current = null;
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: true });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [isMobile, min, max, value, onChange]);
 
   const handleChange = (e) => {
     const newValue = parseFloat(e.target.value);
@@ -122,7 +166,7 @@ export default function Slider({ min = 0, max = 100, value, onChange, step = 1 }
   };
 
   return (
-    <div className='slider'>
+    <div className='slider' ref={containerRef}>
       <h3>
         <span>Timeline of Events</span>
         <span>Sunday, September 20th, 2026</span>

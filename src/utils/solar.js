@@ -184,13 +184,9 @@ export function computeSolarParams(hours) {
   }
 
   // ── Fog ──
-  // Fog color matches horizon, varies based on time of day
-  // Shorter range at night for moodier atmosphere; longer at day
-  // Near: 80-150m, Far: 2500-5500m with time-of-day variation
-  const fogNear = isDaytime ? 100 : 80;
-  const fogFar = isDaytime
-    ? 4000 + 1500 * Math.max(0, elevation) // brighter days see farther
-    : 1800 + 500 * Math.max(0, dayFactor);  // nights are hazier
+  // Fog color matches horizon, constant visibility throughout day to prevent zoom illusion
+  const fogNear = 100;
+  const fogFar = 4000;
   const fogColor = skyHorizonHex;
 
   // ── Moon light intensity ──

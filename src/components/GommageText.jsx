@@ -39,9 +39,9 @@ function buildPetalData(count, seed) {
 
   for (let i = 0; i < count; i++) {
     // Spawn position: petals start in the scene, distributed throughout
-    const rx = rng() * 80 - 60;   // x ∈ [-60, 20] — left off-screen, blown right
-    const ry = rng() * 30 + 15;   // y ∈ [15, 45]  — high in scene
-    const rz = rng() * 80 - 40;   // z ∈ [-40, 40] — spread in depth
+    const rx = rng() * 100 - 100;   // x ∈ [-100, 0] — further left off-screen, blown right
+    const ry = rng() * 40 + 5;   // y ∈ [5, 45] — height range
+    const rz = rng() * 120 - 40;   // z ∈ [-40, 80] — wider spread in depth
     spawnPositions[i * 3]     = rx;
     spawnPositions[i * 3 + 1] = ry;
     spawnPositions[i * 3 + 2] = rz;
@@ -76,9 +76,10 @@ const GommageText = forwardRef(({ timeOfDay }, ref) => {
     uTime: { value: 0 },
     uPalette: { value: null },
     uWindDir: { value: new THREE.Vector2(1.0, 0.0) },
-    uWindSpeed: { value: 12.0 },
+    uWindSpeed: { value: 3.0 },
     uWindGustStrength: { value: 0.35 },
     uWindGustFreq: { value: 0.12 },
+    uDespawnX: { value: 100 },
   });
 
   // ── Palette DataTexture (8×1 RGBA) ──────────────────────────────────────────
@@ -126,6 +127,7 @@ const GommageText = forwardRef(({ timeOfDay }, ref) => {
     transparent: true,
     depthWrite: false,
     blending: THREE.NormalBlending, // Switch from AdditiveBlending to show true colors
+    side: THREE.DoubleSide, // Render both sides so petals don't disappear when spinning
   }), []);
 
   // ── Link palette texture to uniforms ────────────────────────────────────────
@@ -158,10 +160,21 @@ const GommageText = forwardRef(({ timeOfDay }, ref) => {
     };
   }, [petalGeo, petalMat, paletteTexture]);
 
-  // ── Per-frame: Update uTime uniform ──────────────────────────────────────────
+  // ── Per-frame: Update uTime and despawn position uniforms ──────────────────
 
-  useFrame((_, delta) => {
+  useFrame(({ camera }, delta) => {
     petalUniforms.current.uTime.value += delta;
+
+    // Calculate despawn x position based on viewport right edge
+    // For a PerspectiveCamera, visible width at distance z is: 2 * tan(fov/2) * distance
+    if (camera instanceof THREE.PerspectiveCamera) {
+      const distance = Math.abs(camera.position.z); // Distance from camera to z=0 plane
+      const vFOV = camera.fov * Math.PI / 180; // Convert to radians
+      const height = 2 * Math.tan(vFOV / 2) * distance;
+      const width = height * camera.aspect;
+      const rightEdge = camera.position.x + width / 2;
+      petalUniforms.current.uDespawnX.value = rightEdge;
+    }
 
     if (petalMeshRef.current) {
       petalMeshRef.current.count = maxPetals;

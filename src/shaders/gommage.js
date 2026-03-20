@@ -88,6 +88,7 @@ export const PETAL_VERT = /* glsl */ `
   uniform float uWindSpeed;
   uniform float uWindGustStrength;
   uniform float uWindGustFreq;
+  uniform float uDespawnX;
 
   // Varyings
   varying float vAlpha;
@@ -142,13 +143,15 @@ export const PETAL_VERT = /* glsl */ `
     float seed = aBirthLifeSeedScale.z;
     float scale = aBirthLifeSeedScale.w;
 
-    // Calculate age (0 at birth, 1 at death, repeats)
-    float age = mod(uTime - birthTime, lifeDuration) / lifeDuration;
+    // Calculate age as time since birth (unbounded) for smooth animations
+    // Despawn is handled by position-based fadeOut, not time
+    float age = (uTime - birthTime) / lifeDuration;
 
-    // Fade in and out
+    // Wrap time to prevent precision issues and unbounded growth
+    float wrappedTime = mod(uTime, 10000.0);
+
+    // Fade in
     float fadeIn = ss(0.0, 0.05, age);
-    float fadeOut = 1.0 - ss(0.8, 1.0, age);
-    vAlpha = fadeIn * fadeOut;
 
     // Start with object-space position and normal
     vec3 pos = position;
@@ -164,11 +167,12 @@ export const PETAL_VERT = /* glsl */ `
     norm = bendRot * norm;
 
     // === 3D Spin ===
-    // Time-modulated rotation angles with seed randomization
+    // Fixed rotation angles keyed to petal age (0-1 over lifetime), not runtime
+    // Constants scaled ~6-7x from original broken values to maintain familiar spin speed
     float rngBase = seed;
-    float ry = rngBase * 6.2832 + age * uTime * 0.9;
-    float rx = (rngBase + 0.3) * 6.2832 + age * uTime * 1.2;
-    float rz = (rngBase + 0.7) * 6.2832 + age * uTime * 0.7;
+    float ry = rngBase * 6.2832 + age * 5.0;   // ~0.8 rotations per petal life
+    float rx = (rngBase + 0.3) * 6.2832 + age * 6.0;
+    float rz = (rngBase + 0.7) * 6.2832 + age * 3.5;
 
     mat3 spinRot = rotateZ(rz) * rotateX(rx) * rotateY(ry);
     pos = spinRot * pos;
@@ -179,20 +183,20 @@ export const PETAL_VERT = /* glsl */ `
     vec2 windDisp = uWindDir * uWindSpeed * windTime;
 
     // Strong initial gust for first 1 second of petal's life (per-petal, not global)
-    float initialGustFade = 1.0 - smoothstep(0.0, 1.0, age);
-    float initialGustBoost = initialGustFade * 12.0;
+    float initialGustFade = 1.0 - ss(0.0, 1.0, age);
+    float initialGustBoost = initialGustFade * 8.0;
     windDisp += uWindDir * initialGustBoost;
 
-    // Gusts: higher frequency, more pronounced swirling
-    float gustPhase = uTime * uWindGustFreq * 6.2832 + seed * 3.14159;
+    // Gusts: gentle modulation for subtle wind variation
+    float gustPhase = wrappedTime * uWindGustFreq * 6.2832 + seed * 3.14159;
     float gustFactor = 0.5 + 0.5 * sin(gustPhase);
-    windDisp *= (0.8 + gustFactor * 0.4);
+    windDisp *= (0.9 + gustFactor * 0.15);
 
-    // Turbulent swirl: increased amplitude for more loopy dancing
-    float turbX = sin(age * 3.5 + seed * 6.2832 + uTime * 0.5) * 2.2
-                + sin(age * 6.8 + seed * 3.7 + uTime * 1.2) * 0.8;
-    float turbY = cos(age * 2.8 + seed * 5.1 + uTime * 0.4) * 1.4
-                + cos(age * 5.6 + seed * 2.8 + uTime * 0.9) * 0.6;
+    // Turbulent swirl: gentler amplitude for softer movement
+    float turbX = sin(age * 3.5 + seed * 6.2832 + wrappedTime * 0.25) * 1.1
+                + sin(age * 6.8 + seed * 3.7 + wrappedTime * 0.6) * 0.4;
+    float turbY = cos(age * 2.8 + seed * 5.1 + wrappedTime * 0.2) * 0.7
+                + cos(age * 5.6 + seed * 2.8 + wrappedTime * 0.45) * 0.3;
     windDisp += vec2(turbX, turbY);
 
     // Apply scale before adding wind so wind scales with petal size
@@ -209,6 +213,14 @@ export const PETAL_VERT = /* glsl */ `
     // Upward lift at birth
     float burst = 1.5 * ss(0.0, 0.15, age) * (1.0 - ss(0.1, 0.3, age));
     worldPos.y += burst;
+
+    // Position-based despawn: fade out when petal reaches right edge
+    float fadeOut = 1.0;
+    if (worldPos.x >= uDespawnX) {
+      // Petal has reached the right side, fade out
+      fadeOut = 1.0 - ss(0.8, 1.0, min(age, 1.0));
+    }
+    vAlpha = fadeIn * fadeOut;
 
     // Transform normal to world space (since we only applied object-space rotations)
     vNormal = normalize(norm);
@@ -230,16 +242,17 @@ export const PETAL_FRAG = /* glsl */ `
     float u = (floor(vColorIndex) + 0.5) / 8.0;
     vec3 petalColor = texture2D(uPalette, vec2(u, 0.5)).rgb;
 
-    // Extreme saturation boost for vibrant colors
-    // Convert to luminance and oversaturate
+    // Reduce saturation for muted appearance
+    // Convert to luminance and desaturate
     float lum = dot(petalColor, vec3(0.299, 0.587, 0.114));
-    vec3 saturated = mix(vec3(lum), petalColor, 1.8); // 1.8 = super-saturated
-    petalColor = saturated;
+    vec3 desaturated = mix(vec3(lum), petalColor, 0.7); // 0.7 = desaturated
+    petalColor = desaturated;
 
-    // Very subtle lighting (barely perceptible)
+    // Proper two-sided lighting to show petal spin
     vec3 lightDir = normalize(vec3(1.0, 1.0, 0.5));
-    float diffuse = abs(dot(vNormal, lightDir));
-    float lighting = 0.98 + diffuse * 0.04; // Range [0.98, 1.02]
+    vec3 faceNormal = gl_FrontFacing ? vNormal : -vNormal;
+    float diffuse = max(dot(faceNormal, lightDir), 0.0);
+    float lighting = 0.45 + diffuse * 0.55; // Range [0.45, 1.0] — strong shading
     petalColor *= lighting;
 
     float alpha = vAlpha;

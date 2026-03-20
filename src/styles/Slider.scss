@@ -349,12 +349,7 @@
 
   // Time label — floats to the right of the thumb
   .slider__time-label {
-    top: var(--slider-percentage);
-    left: auto;
-    right: -4rem;
-    bottom: auto;
-    margin-bottom: 0;
-    position: absolute;
+    display: none;
   }
 
   // Events wrapper — rightmost column

@@ -120,10 +120,8 @@ function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightI
     return base.multiplyScalar(nightFactor).lerp(moonColor, 1 - nightFactor);
   }, [sunColorHex, nightFactor, isSunVisible, moonColorHex, moonLightIntensity]);
 
-  // Reduce water distortion (reflections) at night
-  const waterDistortion = useMemo(() => {
-    return 3.7 * nightFactor + 2.0 * (1 - nightFactor); // 3.7 day, 2.0 night
-  }, [nightFactor]);
+  // Keep water distortion constant to prevent zoom illusion from changing wave scale
+  const waterDistortion = 3.7;
 
   // Scale reflection visibility based on time of day
   const reflectionScale = useMemo(() => {
