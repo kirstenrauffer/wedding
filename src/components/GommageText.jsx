@@ -9,14 +9,14 @@ const { maxPetals } = GOMMAGE_CONFIG;
 // ─── Ghibli Color Palette ────────────────────────────────────────────────────
 
 const PETAL_PALETTE = [
-  [0xff, 0x4d, 0x6d], // 0: vibrant red
-  [0xff, 0xd1, 0xa9], // 1: peach/apricot
-  [0xc8, 0xe6, 0xc9], // 2: mint green
-  [0xb3, 0x9d, 0xdb], // 3: lavender
-  [0xff, 0xe0, 0x82], // 4: warm yellow
-  [0xf4, 0x3a, 0x60], // 5: deep rose/red
-  [0x80, 0xcb, 0xc4], // 6: teal mint
-  [0xff, 0xcc, 0x80], // 7: warm amber
+  [0xff, 0x3d, 0x5f], // 0: vibrant red
+  [0xff, 0x9d, 0x5c], // 1: warm coral
+  [0x5f, 0xff, 0xb3], // 2: bright mint
+  [0xdd, 0x7f, 0xff], // 3: bright magenta
+  [0xff, 0xf0, 0x4d], // 4: bright yellow
+  [0xff, 0x2d, 0x7f], // 5: bright pink
+  [0x4d, 0xff, 0xe6], // 6: bright cyan
+  [0xff, 0xb3, 0x4d], // 7: bright amber
 ];
 
 // ─── Utility: Seeded PRNG ────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ function buildPetalData(count, seed) {
     // Spread births evenly across the first 6 seconds to create continuous stream
     const birthTime = (i / count) * lifeDuration;
     const seedVal = rng();
-    const scaleVal = 0.5 + rng() * 0.5; // Scale ∈ [0.5, 1.0]
+    const scaleVal = 0.625 + rng() * 0.625; // Scale ∈ [0.625, 1.25] (25% larger)
 
     birthLifeSeedScale[i * 4]     = birthTime;
     birthLifeSeedScale[i * 4 + 1] = lifeDuration;

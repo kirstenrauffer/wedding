@@ -3,7 +3,7 @@
 // Two shader systems: TEXT (dissolution + glow), PETAL (instanced rose-curve billboards).
 
 export const GOMMAGE_CONFIG = {
-  maxPetals: 60,
+  maxPetals: 30,
   cycleSeconds: 10.0,
 };
 
@@ -178,20 +178,26 @@ export const PETAL_VERT = /* glsl */ `
     float windTime = age * lifeDuration;
     vec2 windDisp = uWindDir * uWindSpeed * windTime;
 
-    // Gusts
-    float gustPhase = uTime * uWindGustFreq * 6.2832 + seed * 3.14159;
-    float gustFactor = 0.7 + 0.3 * (0.5 + 0.5 * sin(gustPhase));
-    windDisp *= gustFactor;
+    // Strong initial gust for first 1 second of petal's life (per-petal, not global)
+    float initialGustFade = 1.0 - smoothstep(0.0, 1.0, age);
+    float initialGustBoost = initialGustFade * 12.0;
+    windDisp += uWindDir * initialGustBoost;
 
-    // Turbulent swirl
-    float turbX = sin(age * 2.8 + seed * 6.2832 + uTime * 0.4) * 1.5
-                + sin(age * 5.1 + seed * 3.7 + uTime * 0.9) * 0.5;
-    float turbY = cos(age * 2.1 + seed * 5.1 + uTime * 0.3) * 0.8
-                + cos(age * 4.3 + seed * 2.8 + uTime * 0.7) * 0.3;
+    // Gusts: higher frequency, more pronounced swirling
+    float gustPhase = uTime * uWindGustFreq * 6.2832 + seed * 3.14159;
+    float gustFactor = 0.5 + 0.5 * sin(gustPhase);
+    windDisp *= (0.8 + gustFactor * 0.4);
+
+    // Turbulent swirl: increased amplitude for more loopy dancing
+    float turbX = sin(age * 3.5 + seed * 6.2832 + uTime * 0.5) * 2.2
+                + sin(age * 6.8 + seed * 3.7 + uTime * 1.2) * 0.8;
+    float turbY = cos(age * 2.8 + seed * 5.1 + uTime * 0.4) * 1.4
+                + cos(age * 5.6 + seed * 2.8 + uTime * 0.9) * 0.6;
     windDisp += vec2(turbX, turbY);
 
-    // Apply scale
+    // Apply scale before adding wind so wind scales with petal size
     pos *= scale;
+    windDisp *= scale;
 
     // Transform to world space: spawn position + wind/gravity displacement
     vec3 worldPos = aSpawnPos + vec3(windDisp.x, windDisp.y, 0.0) + pos;
