@@ -29,11 +29,13 @@ export default function Modal({ isOpen, onClose, onCloseStart, closeDelay = 0, c
   return (
     <>
       <div className={`modal__backdrop ${isClosing ? 'modal__backdrop--closing' : ''}`} onClick={handleClose} />
-      <div className={`modal__content ${isClosing ? 'modal__content--closing' : ''}`}>
-        <button className='modal__close' onClick={handleClose} aria-label='Close modal'>
+      <div className='modal__content'>
+        <button className={`modal__close${isClosing ? ' modal__close--closing' : ''}`} onClick={handleClose} aria-label='Close modal'>
           ×
         </button>
-        {children}
+        <div className={`modal__content-inner${isClosing ? ' modal__content-inner--closing' : ''}`}>
+          {children}
+        </div>
       </div>
     </>
   );

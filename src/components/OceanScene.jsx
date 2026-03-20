@@ -18,32 +18,60 @@ import StarField from './StarField';
 import Moon from './Moon';
 import Sun from './Sun';
 import Slider from './Slider';
+import GommageText from './GommageText';
 import { computeSolarParams } from '../utils/solar';
 import { KuwaharaEffect } from '../effects/KuwaharaEffect';
+import { MOON_WORLD_POSITION, MOON_LIGHT_DIRECTION } from '../constants/scene';
 
-function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightIntensity, moonColorHex }) {
+// Helper to blend hex colors
+const lerpHex = (hex1, hex2, t) => {
+  const r1 = parseInt(hex1.slice(1, 3), 16);
+  const g1 = parseInt(hex1.slice(3, 5), 16);
+  const b1 = parseInt(hex1.slice(5, 7), 16);
+  const r2 = parseInt(hex2.slice(1, 3), 16);
+  const g2 = parseInt(hex2.slice(3, 5), 16);
+  const b2 = parseInt(hex2.slice(5, 7), 16);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const r = Math.round(lerp(r1, r2, t));
+  const g = Math.round(lerp(g1, g2, t));
+  const b = Math.round(lerp(b1, b2, t));
+  const hex = (n) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0');
+  return `#${hex(r)}${hex(g)}${hex(b)}`;
+};
 
-  // Compute water color based on time of day
+// Smoothstep helper for smooth transitions
+const smoothstep = (edge0, edge1, x) => {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+};
+
+function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightIntensity, moonColorHex, skyHorizonHex }) {
+
+  // Compute water color based on sky colors and time of day
+  // Water reflects the sky, so use the horizon/mid sky colors but darker and more saturated
   const waterColorHex = useMemo(() => {
-    const nightColor = '#0a191c';
-    const dayColor = '#062a1f';
-    const transitionColor = '#062429';
+    const nightWaterBase = '#0a0f18';   // Cool dark blue (matches moon lighting)
+    const dayWaterBase = '#0a1f2e';    // Cool deep blue (no green)
 
-    // Sunrise: 5-8, Day: 8-18, Sunset: 18-20, Night: 20-5
-    if (timeOfDay >= 8 && timeOfDay < 18) {
-      // Daytime
-      return dayColor;
-    } else if (timeOfDay >= 5 && timeOfDay < 8) {
-      // Sunrise transition
-      return transitionColor;
-    } else if (timeOfDay >= 18 && timeOfDay < 21) {
-      // Sunset transition (smooth fade to night until 9 PM)
-      return transitionColor;
-    } else {
-      // Night
-      return nightColor;
+    // Blend from night to day based on time
+    const SUNRISE = 5;
+    const SUNSET = 18;
+    const dayProgress = (timeOfDay - SUNRISE) / (SUNSET - SUNRISE);
+    const clampedProgress = Math.max(0, Math.min(1, dayProgress));
+
+    // Start with base blend
+    let baseColor = lerpHex(nightWaterBase, dayWaterBase, clampedProgress);
+
+    // Layer in sky horizon color influence (subtle, water is darker than sky)
+    if (skyHorizonHex) {
+      baseColor = lerpHex(baseColor, skyHorizonHex, clampedProgress * 0.15);
     }
-  }, [timeOfDay]);
+
+    return baseColor;
+  }, [timeOfDay, skyHorizonHex]);
+
+  // Check if sun is visible (6 AM to 6 PM)
+  const isSunVisible = timeOfDay >= 6 && timeOfDay <= 18;
 
   const waterNormals = useMemo(() => {
     const tex = new THREE.TextureLoader().load('/textures/waternormals.jpg');
@@ -51,27 +79,26 @@ function OceanWater({ timeOfDay, lightX, lightY, lightZ, sunColorHex, moonLightI
     return tex;
   }, []);
 
-  // Check if sun is visible (6 AM to 6 PM)
-  const isSunVisible = timeOfDay >= 6 && timeOfDay <= 18;
-
   // Calculate night factor for smooth transition (0 = fully night, 1 = day)
   const nightFactor = useMemo(() => {
-    if (timeOfDay >= 7 && timeOfDay <= 17) return 1;       // full day
-    if (timeOfDay >= 5 && timeOfDay < 7) return (timeOfDay - 5) / 2;  // dawn fade in
-    if (timeOfDay > 17 && timeOfDay <= 21) return 1 - (timeOfDay - 17) / 4; // dusk fade out over 4 hours
-    return 0;  // night
+    const dawn = smoothstep(5, 7.5, timeOfDay);
+    const dusk = 1 - smoothstep(17, 21, timeOfDay);
+    return Math.min(dawn, dusk);
   }, [timeOfDay]);
 
-  // Moon position (matches Moon.jsx)
-  const MOON_POSITION = new THREE.Vector3(45, 45, -80);
-  const moonDir = useMemo(() => MOON_POSITION.clone().normalize(), []);
+  // Moon light direction for water reflections
+  const moonLightDir = useMemo(() => MOON_LIGHT_DIRECTION.clone().normalize(), []);
 
-  // Water reflection direction: points to sun during day, moon at night
+  // Water reflection direction: points to sun during day, moon light direction at night
   const waterSunDirection = useMemo(() => {
-    const daytimeDir = new THREE.Vector3(lightX, lightY, lightZ).normalize();
-    // Interpolate from daytime sun direction to moon direction
-    return daytimeDir.clone().lerp(moonDir, 1 - nightFactor).normalize();
-  }, [lightX, lightY, lightZ, nightFactor, moonDir]);
+    // During daytime (7 AM – 5 PM), track the moving sun for dynamic glint
+    if (nightFactor >= 1) {
+      return new THREE.Vector3(lightX, lightY, lightZ).normalize();
+    }
+    // At dusk/night/dawn (5 PM – 7 AM), lock to the static moon light direction
+    // This prevents the "sweep" caused by simultaneous changes to both direction and lerp weight
+    return moonLightDir.clone();
+  }, [lightX, lightY, lightZ, nightFactor, moonLightDir]);
 
   // Water reflection color: moon shimmer at night, fades to sun during day
   const waterSunColor = useMemo(() => {
@@ -289,8 +316,8 @@ function SceneLighting({ lightX, lightY, lightZ, sunColorHex, ambientIntensity, 
   const ambientLightRef = useRef();
   const { scene } = useThree();
 
-  // Moon light direction: from moon position (35, 45, -80)
-  const MOON_LIGHT_DIR = useMemo(() => new THREE.Vector3(35, 45, -80).normalize(), []);
+  // Moon light direction: separate from visual moon position for balanced lighting
+  const MOON_LIGHT_DIR = useMemo(() => MOON_LIGHT_DIRECTION.clone().normalize(), []);
 
   useEffect(() => {
     if (directionalLightRef.current) {
@@ -381,6 +408,7 @@ function Scene({ timeOfDay }) {
       <StarField timeOfDay={timeOfDay} />
       <Sun timeOfDay={timeOfDay} />
       <Moon timeOfDay={timeOfDay} />
+      <GommageText />
       <CloudSky
         timeOfDay={timeOfDay}
         lightX={solar.lightX}
@@ -403,6 +431,7 @@ function Scene({ timeOfDay }) {
         sunColorHex={solar.sunColorHex}
         moonLightIntensity={solar.moonLightIntensity}
         moonColorHex={solar.moonColorHex}
+        skyHorizonHex={solar.skyHorizonHex}
       />
       <PostProcessing timeOfDay={timeOfDay} />
     </>
@@ -510,6 +539,18 @@ export default function OceanScene({ isModalOpen }) {
         closeTimeoutRef.current = null;
       }, 350); // 0.3s animation + 50ms buffer
     }
+  }, [isModalOpen]);
+
+  // Handle scroll wheel to adjust time-of-day slider
+  useEffect(() => {
+    const handleWheel = (e) => {
+      if (isModalOpen) return; // let modal content scroll normally
+      e.preventDefault();
+      const step = 0.25; // 15 minutes per scroll tick
+      setTimeOfDay(prev => Math.min(24, Math.max(0, prev + (e.deltaY > 0 ? step : -step))));
+    };
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => window.removeEventListener('wheel', handleWheel);
   }, [isModalOpen]);
 
   return (

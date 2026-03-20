@@ -5,7 +5,7 @@ import TravelModal from './TravelModal';
 import HotelModal from './HotelModal';
 import FAQModal from './FAQModal';
 
-export default function Navigation({ openModal, setOpenModal, setIsSceneExpanded }) {
+export default function Navigation({ openModal, setOpenModal, setIsSceneExpanded, isMenuOpen, setIsMenuOpen }) {
   const handleLinkClick = (e, link) => {
     e.preventDefault();
     setIsSceneExpanded(true); // slider fades, FLIP pins element
@@ -25,7 +25,25 @@ export default function Navigation({ openModal, setOpenModal, setIsSceneExpanded
   return (
     <>
       <header className='navigation__header'>
-        <ul className='navigation__list'>
+        {/* Mobile hamburger/close button */}
+        <button
+          className={`navigation__hamburger${isMenuOpen ? ' navigation__hamburger--open' : ''}`}
+          onClick={() => setIsMenuOpen(prev => !prev)}
+          aria-label={isMenuOpen ? "Close menu" : "Toggle menu"}
+          aria-expanded={isMenuOpen}
+        >
+          {isMenuOpen ? (
+            <span className="navigation__hamburger-close">{'\u00A0✕\u00A0'}</span>
+          ) : (
+            <>
+              <span className="navigation__hamburger-line navigation__hamburger-line--top" />
+              <span className="navigation__hamburger-line navigation__hamburger-line--bottom" />
+            </>
+          )}
+        </button>
+
+        {/* Desktop three-column layout — hidden on mobile */}
+        <ul className='navigation__list navigation__list--desktop'>
           <li>
             <div className='navigation__header-multi-line'>
               <h1 className='ballet-regular'>Kirsten and Israel</h1>
@@ -33,7 +51,12 @@ export default function Navigation({ openModal, setOpenModal, setIsSceneExpanded
             </div>
           </li>
           <li>
-            <h2><div className='navigation__rounded-full animate-pulse w-4 h-4'></div> <WaveText text='Open for RSVPs until August 20th, 2026' /></h2>
+            <div className='navigation__rsvp-container'>
+              <div className='neon-sign'>
+                <span className='neon-text'>OPEN</span>
+              </div>
+              <h2><div className='navigation__rounded-full animate-pulse w-4 h-4'></div> <WaveText text='Open for RSVPs until August 20th, 2026' /></h2>
+            </div>
           </li>
           <li>
             <div>
@@ -45,6 +68,16 @@ export default function Navigation({ openModal, setOpenModal, setIsSceneExpanded
             </div>
           </li>
         </ul>
+
+        {/* Mobile center RSVP — hidden on desktop */}
+        <div className='navigation__rsvp-mobile'>
+          <div className='navigation__rsvp-container'>
+            <div className='neon-sign'>
+              <span className='neon-text'>OPEN</span>
+            </div>
+            <h2><div className='navigation__rounded-full animate-pulse w-4 h-4'></div> <WaveText text='Open for RSVPs until 8/20/26' /></h2>
+          </div>
+        </div>
       </header>
 
       {createPortal(

@@ -17,23 +17,18 @@
 
   &__content {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: 100%;
-    height: 100%;
-    padding: 2rem;
+    inset: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     z-index: 1000;
-    color: white;
     backdrop-filter: blur(60px);
     -webkit-backdrop-filter: blur(60px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    animation: fadeIn 0.25s ease-out backwards;
+    padding: 2rem;
+    box-sizing: border-box;
 
     &::after {
       content: '';
@@ -43,12 +38,35 @@
       right: 0;
       bottom: 0;
       pointer-events: none;
-      background: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.4) 100%);
+      background: radial-gradient(ellipse 150% 150% at center, transparent 0%, rgba(0, 0, 0, 0.4) 100%);
       z-index: -1;
     }
 
+    @media (max-width: 768px) {
+      padding: 1.5rem 1rem 1rem 1rem;
+    }
+
+    @media (max-width: 480px) {
+      padding: 0.75rem 0.5rem 0.5rem 0.5rem;
+      justify-content: flex-start;
+      padding-top: 5rem;
+    }
+  }
+
+  &__content-inner {
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+    min-width: 0;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    animation: fadeIn 0.25s ease-out backwards;
+
     &--closing {
       animation: scaleOut 0.25s ease-out forwards;
+      transform-origin: center center;
     }
   }
 
@@ -71,10 +89,35 @@
     justify-content: center;
     border-radius: 50%;
     z-index: 1001;
+    flex-shrink: 0;
 
     &:hover {
       opacity: 1;
       background: rgba(255, 255, 255, 0.25);
+    }
+
+    &:active {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    &--closing {
+      animation: fadeOut 0.25s ease-out forwards;
+    }
+
+    @media (max-width: 768px) {
+      top: 1rem;
+      right: 0.75rem;
+      width: 2.75rem;
+      height: 2.75rem;
+      font-size: 2rem;
+    }
+
+    @media (max-width: 480px) {
+      top: 0.5rem;
+      right: 0.5rem;
+      width: 2.5rem;
+      height: 2.5rem;
+      font-size: 1.75rem;
     }
   }
 }

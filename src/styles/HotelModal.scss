@@ -6,15 +6,15 @@
   justify-items: center;
   max-width: 1400px;
   margin: 0 auto;
-}
+  box-sizing: border-box;
+  min-width: 0;
 
-.hotel-cards > p {
-  grid-column: 1 / -1;
-}
-
-.hotel-card__description {
-  font-size: 1.1rem;
-  margin-bottom: 1.5rem;
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    max-width: 100%;
+    min-width: 0;
+  }
 }
 
 .hotel-card {
@@ -23,7 +23,7 @@
   max-width: 450px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(0, 0, 0, 0.4);
   transition: all 0.2s ease-in;
   position: relative;
   text-decoration: none !important;
@@ -35,9 +35,9 @@
   }
 
   &:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(0, 0, 0, 0.4);
     border-color: rgba(255, 255, 255, 0.15);
-    box-shadow: 0 0 40px 10px rgba(255, 255, 255, 0.25), inset 0 0 20px rgba(255, 255, 255, 0.0625);
+    box-shadow: 0 0 40px 10px rgba(255, 255, 255, 0.5), inset 0 0 20px rgba(255, 255, 255, 0.15);
     transition: all 0.2s ease-out;
 
     &:before {
@@ -62,13 +62,13 @@
   }
 
   &--featured {
-    background: rgba(100, 200, 255, 0.18);
+    background: rgba(10, 40, 80, 0.5);
     border-color: rgba(100, 200, 255, 0.4);
 
     &:hover {
-      background: rgba(100, 200, 255, 0.15);
+      background: rgba(10, 40, 80, 0.5);
       border-color: rgba(100, 200, 255, 0.5);
-      box-shadow: 0 0 50px 15px rgba(100, 200, 255, 0.25), inset 0 0 20px rgba(100, 200, 255, 0.125);
+      box-shadow: 0 0 50px 15px rgba(100, 200, 255, 0.5), inset 0 0 20px rgba(100, 200, 255, 0.25);
     }
   }
 
@@ -84,10 +84,18 @@
       height: 100%;
       object-fit: cover;
     }
+
+    @media (max-width: 480px) {
+      height: 180px;
+    }
   }
 
   &__content {
     padding: 1.5rem;
+
+    @media (max-width: 480px) {
+      padding: 1rem;
+    }
   }
 
   h3 {
@@ -95,6 +103,10 @@
     font-size: 1.5rem;
     color: white;
     text-decoration: none;
+
+    @media (max-width: 480px) {
+      font-size: 1.25rem;
+    }
   }
 
   p, span {
@@ -111,6 +123,7 @@
     margin: 0 0 1rem 0;
     color: rgba(255, 255, 255, 0.7);
     font-size: 0.9rem;
+    word-spacing: 0.05em;
   }
 
   &__pills {
@@ -137,6 +150,32 @@
 
 }
 
+.hotel-card__book-btn {
+  display: none;
+
+  @media (max-width: 768px) {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 0.5rem 1.5rem;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    pointer-events: none;
+    background: #ffffff;
+    color: #000000;
+    border: none;
+  }
+}
+
+.hotel-card--featured .hotel-card__book-btn {
+  @media (max-width: 768px) {
+    background: #2196F3;
+    color: #ffffff;
+  }
+}
+
 .pill {
   display: inline-block;
   padding: 0.4rem 0.9rem;
@@ -146,7 +185,13 @@
   font-size: 0.8rem;
   color: white;
   font-weight: 500;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
+
+  @media (max-width: 480px) {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.7rem;
+  }
 
   &:first-child {
     background: rgba(76, 200, 120, 0.35);

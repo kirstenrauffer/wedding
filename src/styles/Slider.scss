@@ -14,13 +14,14 @@
       position: absolute;
       opacity: .5;
       top: 0;
-      transform: translateX(-50%);
+      transform: translate(-50%, 0);
       background: none;
       border: none;
       color: white;
       cursor: pointer;
       padding: 0;
-      width: auto;
+      width: 2.5rem;
+      text-align: center;
       white-space: nowrap;
       transition: opacity 0.2s;
     }
@@ -52,7 +53,7 @@
     top: 0;
     width: 1px;
     background: rgba(255, 255, 255, 0.4);
-    transform: translateX(-50%);
+    transform: translate(-50%, 0);
 
     &--hour {
       height: 12px;
@@ -90,11 +91,13 @@
   &__event {
     position: absolute;
     top: 0;
-    transform: translateX(-50%);
+    transform: translate(-50%, 0);
     display: flex;
     gap: 0.25rem;
     pointer-events: auto;
     height: 100%;
+    cursor: pointer;
+    user-select: none;
 
     &::before {
       content: '';
@@ -103,7 +106,7 @@
       top: -6rem;
       bottom: 0;
       width: 1px;
-      transform: translateX(-50%);
+      transform: translate(-50%, 0);
       top: -2.5rem;
       pointer-events: none;
       border-left: 1px dashed rgba(255, 255, 255, 0.3);
@@ -184,7 +187,7 @@
   &__time-label {
     position: absolute;
     bottom: 100%;
-    left: calc(var(--slider-percentage, 0%) - 30px);
+    left: var(--slider-percentage, 0%);
     width: 60px;
     text-align: center;
     color: white;
@@ -209,7 +212,7 @@
     &::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      width: 12px;
+      width: 12px; // ⚠️ MUST MATCH THUMB_WIDTH constant in Slider.jsx
       height: 12px;
       background: white;
       cursor: pointer;
@@ -217,7 +220,7 @@
     }
 
     &::-moz-range-thumb {
-      width: 12px;
+      width: 12px; // ⚠️ MUST MATCH THUMB_WIDTH constant in Slider.jsx
       height: 12px;
       background: white;
       cursor: pointer;
@@ -243,6 +246,179 @@
       font-size: 1.25rem;
       font-weight: 700;
     }
+  }
+}
+
+// Mobile vertical slider layout
+@media (max-width: $bp-tablet) {
+  .slider {
+    width: 100%;
+    height: 60vh;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0 1rem;
+    box-sizing: border-box;
+  }
+
+  // Main content area becomes a horizontal flex row
+  .slider__content {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    gap: 0.5rem;
+    align-items: stretch;
+    width: 100%;
+    min-width: 0;
+  }
+
+  // Hour labels — vertical column on the right
+  .slider__timeline {
+    flex-shrink: 0;
+    width: 2.5rem;
+    height: 100%;
+    order: 3; // rightmost
+
+    button {
+      top: auto;
+      left: auto;
+      transform: translate(0, -50%); // center vertically on tick
+      position: absolute;
+      width: 100%;
+    }
+  }
+
+  // Tick marks — vertical column, ticks now horizontal strokes
+  .slider__ticks {
+    flex-shrink: 0;
+    width: 12px;
+    height: 100%;
+    order: 2;
+    margin-bottom: 0;
+
+    .slider__tick {
+      left: 0;
+      top: auto;
+      width: 12px;
+      height: 1px;
+      transform: translate(0, -50%);
+
+      &--hour {
+        width: 12px;
+        height: 1px;
+      }
+
+      &--half {
+        width: 3px;
+        height: 1px;
+      }
+    }
+  }
+
+  // Input track — thin vertical line in center
+  .slider__input-container {
+    flex-shrink: 0;
+    width: 1px;
+    height: 100%;
+    order: 1; // second from left
+  }
+
+  // The range input itself — vertical
+  .slider__input {
+    writing-mode: vertical-lr;
+    direction: rtl; // makes max at top, min at bottom
+    width: 1px;
+    height: 100%;
+    top: 0; // reset the -34px horizontal hack
+    position: relative;
+
+    &::-webkit-slider-thumb {
+      width: 12px;
+      height: 12px;
+    }
+
+    &::-moz-range-thumb {
+      width: 12px;
+      height: 12px;
+    }
+  }
+
+  // Time label — floats to the right of the thumb
+  .slider__time-label {
+    top: var(--slider-percentage);
+    left: auto;
+    right: -4rem;
+    bottom: auto;
+    margin-bottom: 0;
+    position: absolute;
+  }
+
+  // Events wrapper — leftmost column
+  div:has(.slider__events) {
+    width: 100%;
+    height: 100%;
+    order: 0;
+  }
+
+  .slider__events {
+    height: 100%;
+    width: 100%;
+  }
+
+  // Individual events — horizontal layout (extend left from track dot)
+  .slider__event {
+    top: auto;
+    left: auto;
+    transform: translate(0, -50%);
+    width: auto;
+    height: auto;
+    display: flex;
+    gap: 0.25rem;
+
+    &::before {
+      top: 50%;
+      left: auto;
+      right: 0;
+      height: 1px;
+      width: 1rem;
+      border-top: 1px dashed rgba(255, 255, 255, 0.3);
+      border-left: none;
+      bottom: auto;
+    }
+
+    .slider__event-metadata-container {
+      flex-direction: row-reverse; // dot on right, text on left
+      top: auto;
+      justify-content: flex-end;
+      align-items: center;
+      position: relative;
+    }
+  }
+
+  // Stagger event widths (instead of heights)
+  .slider__event:nth-child(1) {
+    width: 7rem;
+    height: auto;
+  }
+  .slider__event:nth-child(2) {
+    width: 6rem;
+    height: auto;
+  }
+  .slider__event:nth-child(3) {
+    width: 5rem;
+    height: auto;
+  }
+  .slider__event:nth-child(4) {
+    width: 4rem;
+    height: auto;
+  }
+  .slider__event:nth-child(5) {
+    width: 3rem;
+    height: auto;
+  }
+  .slider__event:nth-child(6) {
+    width: 3rem;
+    height: auto;
   }
 }
 

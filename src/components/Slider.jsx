@@ -1,5 +1,54 @@
-import { useRef } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import '../styles/Slider.scss';
+
+// CONSTANTS: Slider thumb positioning
+// ⚠️ MUST MATCH .slider__input::-webkit-slider-thumb width in Slider.scss (line 215)
+const THUMB_WIDTH = 12; // px
+const THUMB_RADIUS = THUMB_WIDTH / 2;
+
+/**
+ * Calculate CSS position for slider-related elements accounting for thumb width.
+ * Native range input thumb center is constrained to [thumbRadius, 100% - thumbRadius],
+ * not the full [0%, 100%]. This helper corrects positioning to match thumb center.
+ *
+ * @param {number} value - Current slider value (0 to max)
+ * @param {number} max - Maximum slider value (typically 24 for hours)
+ * @param {number} adjustment - Optional CSS offset in pixels (default: 0)
+ *                              Use negative for left, positive for right
+ *                              (e.g., -30 to center a 60px label)
+ * @returns {string} CSS calc() expression safe for use in inline styles
+ */
+const thumbPosition = (value, max, adjustment = 0) => {
+  if (value < 0 || value > max) {
+    console.warn(`thumbPosition: value ${value} outside range [0, ${max}]`);
+  }
+  const fraction = value / max;
+  const adjustStr = adjustment !== 0
+    ? ` ${adjustment > 0 ? '+' : '-'} ${Math.abs(adjustment)}px`
+    : '';
+  return `calc(${fraction} * (100% - ${THUMB_WIDTH}px) + ${THUMB_RADIUS}px${adjustStr})`;
+};
+
+/**
+ * Calculate CSS top position for vertical slider (mobile).
+ * Inverted fraction: value=max → top:0%, value=0 → top:100%.
+ * This places max (12am/value 24) at the top and min (12am/value 0) at the bottom.
+ *
+ * @param {number} value - Current slider value (0 to max)
+ * @param {number} max - Maximum slider value (typically 24 for hours)
+ * @param {number} adjustment - Optional CSS offset in pixels (default: 0)
+ * @returns {string} CSS calc() expression safe for use in inline styles
+ */
+const thumbPositionV = (value, max, adjustment = 0) => {
+  if (value < 0 || value > max) {
+    console.warn(`thumbPositionV: value ${value} outside range [0, ${max}]`);
+  }
+  const fraction = (max - value) / max; // inverted
+  const adjustStr = adjustment !== 0
+    ? ` ${adjustment > 0 ? '+' : '-'} ${Math.abs(adjustment)}px`
+    : '';
+  return `calc(${fraction} * (100% - ${THUMB_WIDTH}px) + ${THUMB_RADIUS}px${adjustStr})`;
+};
 
 const HOURS = [
   { label: '12am', value: 0 },
@@ -48,6 +97,16 @@ const formatTimeOfDay = (hours) => {
 
 export default function Slider({ min = 0, max = 100, value, onChange, step = 1 }) {
   const timelineRef = useRef(null);
+  const [isMobile, setIsMobile] = useState(() =>
+    window.matchMedia('(max-width: 768px)').matches
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   const handleChange = (e) => {
     const newValue = parseFloat(e.target.value);
@@ -68,14 +127,18 @@ export default function Slider({ min = 0, max = 100, value, onChange, step = 1 }
         <span>Timeline of Events</span>
         <span>Sunday, September 20th, 2026</span>
       </h3>
-      <div>
+      <div className='slider__content'>
         <div className='slider__timeline' ref={timelineRef}>
           {HOURS.map((hour) => (
             <button
               key={hour.value}
               className={`slider__label ${Math.round(value) === hour.value ? 'slider__label--active' : ''}`}
               onClick={() => handleHourClick(hour.value)}
-              style={{ left: `${(hour.value / 24) * 100}%` }}
+              style={{
+                [isMobile ? 'top' : 'left']: isMobile
+                  ? thumbPositionV(hour.value, 24)
+                  : thumbPosition(hour.value, 24)
+              }}
             >
               {hour.label}
             </button>
@@ -84,20 +147,27 @@ export default function Slider({ min = 0, max = 100, value, onChange, step = 1 }
         <div className='slider__ticks'>
           {Array.from({ length: 49 }, (_, i) => {
             const tickValue = i * 0.5;
-            const percentage = (tickValue / 24) * 100;
             const isHour = i % 2 === 0;
             return (
               <div
                 key={i}
                 className={`slider__tick ${isHour ? 'slider__tick--hour' : 'slider__tick--half'}`}
-                style={{ left: `${percentage}%` }}
+                style={{
+                  [isMobile ? 'top' : 'left']: isMobile
+                    ? thumbPositionV(tickValue, 24)
+                    : thumbPosition(tickValue, 24)
+                }}
               />
             );
           })}
         </div>
         <div
           className='slider__input-container'
-          style={{ '--slider-percentage': `${(value / 24) * 100}%` }}
+          style={{
+            '--slider-percentage': isMobile
+              ? thumbPositionV(value, 24, -10)
+              : thumbPosition(value, 24, -30)
+          }}
         >
           <div className='slider__time-label'>
             {formatTimeOfDay(value)}
@@ -118,8 +188,15 @@ export default function Slider({ min = 0, max = 100, value, onChange, step = 1 }
               <div
                 key={event.eventLabel}
                 className='slider__event'
-                style={{ left: `${(event.value / 24) * 100}%` }}
+                style={{
+                  [isMobile ? 'top' : 'left']: isMobile
+                    ? thumbPositionV(event.value, 24)
+                    : thumbPosition(event.value, 24)
+                }}
                 title={event.eventLabel}
+                onClick={() => handleHourClick(event.value)}
+                role='button'
+                tabIndex={0}
               >
                 <div className='slider__event-metadata-container'>
                   <div className='slider__event-dot' />

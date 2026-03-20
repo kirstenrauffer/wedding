@@ -45,7 +45,7 @@ export function computeSolarParams(hours) {
   const goldenHour = isDaytime ? Math.pow(1 - elevation, 1.5) : 0;
 
   // Separate dawn vs dusk golden hour intensity (asymmetric — sunsets linger longer)
-  const dawnGolden = goldenHour * smoothstep(4.5, 6, hours) * (1 - smoothstep(7.5, 9, hours));
+  const dawnGolden = goldenHour * smoothstep(4.5, 6, hours) * (1 - smoothstep(SUNSET, SUNSET + 2, hours));
   const duskGolden = goldenHour * smoothstep(16, 17.5, hours) * (1 - smoothstep(19, 20, hours));
 
   // ── Moon lighting factor ──

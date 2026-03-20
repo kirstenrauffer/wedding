@@ -2,6 +2,7 @@ import { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useControls, folder } from 'leva';
 import { SOLAR } from '../utils/solar';
+import { MOON_WORLD_POSITION } from '../constants/scene';
 
 const MOON_VERTEX = /* glsl */ `
   varying vec3 vNormal;
@@ -223,7 +224,7 @@ export default function Moon({ timeOfDay = 12 }) {
   const materialRef = useRef();
 
   // Moon position: in the sky, visible from camera
-  const moonPosition = new THREE.Vector3(75, 45, -80);
+  const moonPosition = MOON_WORLD_POSITION;
 
   // Read light direction from Leva (solar system)
   const { lightX, lightY, lightZ } = useControls({

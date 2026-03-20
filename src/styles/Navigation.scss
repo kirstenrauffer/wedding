@@ -51,4 +51,133 @@
     background-color: #77dd77;
     flex-shrink: 0;
   }
+
+  &__rsvp-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+}
+
+.neon-sign {
+  display: none; // hidden for now
+  border: 2px solid;
+  border-image-source: linear-gradient(45deg, #0099ff, #00ccff, #0099ff);
+  border-image-slice: 1;
+  border-radius: 4px;
+  box-shadow: 0 0 10px #0099ff, 0 0 20px #0099ff, 0 0 30px #0099ff inset,
+    0 0 5px #00ccff;
+}
+
+.neon-sign {
+  padding: 0.75rem 1.5rem;
+}
+
+.neon-text {
+  font-size: 1.5rem;
+  font-family: "Sacramento", cursive;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 5px #ff0000, 0 0 10px #ff0000, 0 0 15px #ff0000;
+  color: #ffaaaa;
+  line-height: 0;
+}
+
+// Hamburger button — desktop hidden, mobile shown
+.navigation__hamburger {
+  display: none; // hidden on desktop by default
+  position: absolute;
+  right: 1rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  z-index: 200;
+  padding: 0;
+}
+
+// Mobile-only RSVP block — shown only on mobile
+.navigation__rsvp-mobile {
+  display: none; // hidden on desktop
+}
+
+// Mobile drawer and overlay — hidden on desktop
+.navigation__drawer {
+  display: none; // hide drawer on desktop
+}
+
+.navigation__overlay {
+  display: none; // hide overlay on desktop
+}
+
+// Desktop list visible on desktop
+.navigation__list--desktop {
+  display: flex; // show on desktop by default
+}
+
+// Mobile layout styles
+@media (max-width: #{$bp-tablet}) {
+  // Header changes
+  .navigation__header {
+    position: static; // stack as block element, not fixed
+    width: 100%;
+    padding: 0; // remove padding, let children handle it
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: $color-bg;
+    z-index: 100;
+    height: auto; // auto height based on content
+  }
+
+  // Hide desktop three-column layout
+  .navigation__list--desktop {
+    display: none;
+  }
+
+  // Show hamburger button
+  .navigation__hamburger {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+
+    &-line {
+      display: block;
+      width: 1.75rem;
+      height: 2px;
+      background: $color-primary;
+      border-radius: 2px;
+      transition: transform 0.4s ease, opacity 0.4s ease;
+      transform-origin: center;
+    }
+
+    &-close {
+      font-size: 1.5rem;
+      color: $color-primary;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    &--open {
+      .navigation__hamburger-line--top {
+        transform: translateY(7px) rotate(45deg);
+      }
+      .navigation__hamburger-line--bottom {
+        transform: translateY(-7px) rotate(-45deg);
+      }
+    }
+  }
+
+  // Show mobile RSVP block (centered in header)
+  .navigation__rsvp-mobile {
+    display: flex;
+    flex: 1;
+    justify-content: center;
+    padding: 1rem 0;
+  }
+
 }

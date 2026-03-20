@@ -1,6 +1,13 @@
 .faq-card {
   width: 600px;
   max-width: 90vw;
+
+  @media (max-width: 480px) {
+    .card__body {
+      padding: 2.5rem 1rem;
+    }
+    max-width: 95vw;
+  }
 }
 
 .faq-list {
@@ -47,6 +54,10 @@
   flex-shrink: 0;
   margin-left: 1rem;
   font-weight: 300;
+
+  @media (max-width: 480px) {
+    font-size: 1.25rem;
+  }
 }
 
 .faq-item__answer {
